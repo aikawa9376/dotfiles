@@ -11,6 +11,7 @@ function M.run()
   local previous_opts = state.opts
   local previous_sessions = state.sessions
   local previous_notify = vim.notify
+  local previous_system = vim.system
   local previous_bufnr = vim.api.nvim_get_current_buf()
   local winid = vim.api.nvim_get_current_win()
   local base = vim.fn.tempname() .. "-image-attachment"
@@ -35,6 +36,7 @@ function M.run()
     state.opts = previous_opts
     state.sessions = previous_sessions
     vim.notify = previous_notify
+    vim.system = previous_system
     vim.fn.delete(base, "rf")
   end
 
@@ -50,7 +52,6 @@ function M.run()
         max_dimension = 0,
         notify = false,
         import = { copy = true },
-        drop = { enabled = false },
         picker = { recent_limit = 5 },
         preview = { enabled = false },
       },
@@ -69,6 +70,34 @@ function M.run()
     vim.api.nvim_win_set_buf(winid, scratch_bufnr)
 
     local image_paste = require("lazyagent.logic.image_paste")
+    assert_equal(require("lazyagent.config.defaults").build().image_paste.drop.enabled, false,
+      "automatic image imports are opt-in")
+    local commands = {
+      'cat "' .. source_path .. '"',
+      "curl 'https://example.test/screenshot.png?raw=1'",
+      source_path,
+      "file://" .. source_path,
+      "@" .. source_path,
+    }
+    local image_commands = 0
+    vim.system = function()
+      image_commands = image_commands + 1
+      error("ordinary text must not run an image download or conversion")
+    end
+    for _, mode in ipairs({ "unset", "disabled" }) do
+      state.opts.image_paste.drop = mode == "disabled" and { enabled = false } or nil
+      vim.api.nvim_buf_set_lines(scratch_bufnr, 0, -1, false, commands)
+      image_paste.process_buffer(scratch_bufnr)
+      vim.api.nvim_exec_autocmds("TextChanged", { buffer = scratch_bufnr })
+      vim.wait(30, function() return false end)
+      assert_equal(vim.api.nvim_buf_get_lines(scratch_bufnr, 0, -1, false), commands,
+        mode .. " auto-import preserves pasted commands, file paths and URLs")
+      assert_equal(vim.fn.isdirectory(storage), 0, mode .. " auto-import creates no image storage")
+      assert_equal(image_commands, 0, mode .. " auto-import runs no external image commands")
+    end
+    vim.system = previous_system
+    vim.api.nvim_buf_set_lines(scratch_bufnr, 0, -1, false, { "" })
+
     local stored_path = assert(image_paste.attach_file_into_buffer(scratch_bufnr, source_path))
     assert(stored_path ~= source_path, "selected image is copied into LazyAgent storage")
     assert_equal(vim.fn.filereadable(stored_path), 1, "stored attachment exists")

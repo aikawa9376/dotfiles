@@ -102,6 +102,9 @@ require("lazyagent").setup({
     import = {
       copy = true, -- picker で選んだ local image を conversation scope へ copy
     },
+    drop = {
+      enabled = false, -- 通常の貼り付け・文字入力からは画像を自動取り込みしない
+    },
     picker = {
       recent_limit = 20,
     },
@@ -144,7 +147,7 @@ agent ごとの設定は global 設定より優先されます。`interactive_ag
 
 添付画像は `@/absolute/path/to/image.png` の行として挿入し、`folke/snacks.nvim` のimage機能が使える場合はinline previewします。Screenshotは`WAYLAND_DISPLAY` / `DISPLAY`とOSから環境を判定し、Linuxの`import`（ImageMagick / X11）または`grim+slurp`（Wayland）、macOSの`screencapture -i`、WindowsのSnipping Tool / screen clipを利用します。Wayland上でX11用の`import`へfallbackすることはありません。ACP sessionではpickerとtranscript footerにimage input capabilityを表示し、非対応agentへ添付した場合は送信前に警告します。
 
-scratchへ画像file pathや画像URLをdrag & dropした場合も、`image_paste.drop.enabled = true`なら自動で取り込みます。query string付き画像URLやSVGも対象です。defaultの`image_paste.dir_layout = "conversation"`では、画像を`image_paste.dir`配下のconversation / live transcript / scratchごとの`.../<scope>/images/`へ保存します。pickerで選んだlocal fileは`image_paste.import.copy`、dropしたlocal fileは`image_paste.drop.copy`を`false`にすると元pathをそのまま使います。フラット保存へ戻す場合は`image_paste.dir_layout = "flat"`を指定してください。Clipboard専用keymapは`scratch_keymaps.paste_image_normal` / `paste_image_insert` / `paste_image_insert_alt`で追加できます。
+通常の貼り付け・文字入力・drag & dropでは、画像file pathや画像URLを含んでもテキストをそのまま保ち、画像の自動保存や`@path`への置換は行いません。`:LazyAgentImage`・`:LazyAgentPasteImage`・`:LazyAgentScreenShot`や対応するkeymapで明示的に添付した場合は、画像を取り込んで参照を挿入します。自動取り込みが必要な場合だけ`image_paste.drop.enabled = true`を指定してください（defaultは`false`）。このopt-in機能はdrag & drop専用ではなく、貼り付けや文字入力にも適用され、query string付き画像URLやSVGも対象です。defaultの`image_paste.dir_layout = "conversation"`では、画像を`image_paste.dir`配下のconversation / live transcript / scratchごとの`.../<scope>/images/`へ保存します。pickerで選んだlocal fileは`image_paste.import.copy`、自動取り込みしたlocal fileは`image_paste.drop.copy`を`false`にすると元pathをそのまま使います。フラット保存へ戻す場合は`image_paste.dir_layout = "flat"`を指定してください。Clipboard専用keymapは`scratch_keymaps.paste_image_normal` / `paste_image_insert` / `paste_image_insert_alt`で追加できます。
 
 ## Skills mount / launch wiring
 

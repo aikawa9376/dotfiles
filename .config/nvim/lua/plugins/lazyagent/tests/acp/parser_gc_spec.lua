@@ -3,9 +3,18 @@ local M = {}
 function M.run()
   local attach = require("lazyagent.acp.parser_gc").attach
   local schedule, hrtime, gc = vim.schedule, vim.uv.hrtime, collectgarbage
+  local gc_source = debug.getinfo(attach, "S").source
   local callbacks, steps = {}, {}
   local finished, running = true, true
-  vim.schedule = function(fn) callbacks[#callbacks + 1] = fn end
+  vim.schedule = function(fn)
+    -- Buffer disposal also schedules Neovim's own work (e.g. autoread).
+    -- Only the collector's callbacks belong to this test's controlled queue.
+    if debug.getinfo(fn, "S").source == gc_source then
+      callbacks[#callbacks + 1] = fn
+    else
+      schedule(fn)
+    end
+  end
   _G.collectgarbage = function(kind, budget)
     if kind == "isrunning" then return running end
     assert(kind == "step" and budget == 0,
@@ -14,7 +23,11 @@ function M.run()
     return finished
   end
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].filetype = "lazyagent_acp"
+  local function filetype(value)
+    -- Transcript FileType handlers can make buffers read-only in the full suite.
+    vim.api.nvim_buf_call(buf, function() vim.cmd("noautocmd setlocal filetype=" .. value) end)
+  end
+  filetype("lazyagent_acp")
   local count, changes = 1, {}
   local parser = { _parse_regions = function() return changes, count, 42 end }
   local function reparse()
@@ -39,15 +52,15 @@ function M.run()
     assert(#callbacks == 1 and #steps == 0, "native parse debt defers and coalesces GC work")
     table.remove(callbacks, 1)()
     assert(#steps == 1 and #callbacks == 0, "a finished cycle stops the job")
-    vim.bo[buf].filetype = "markdown"
+    filetype("markdown")
     reparse()
     assert(#callbacks == 0, "ordinary Markdown keeps its GC policy")
-    vim.bo[buf].filetype = "lazyagent_acp"
+    filetype("lazyagent_acp")
     reparse()
-    vim.bo[buf].filetype = "markdown"
+    filetype("markdown")
     table.remove(callbacks, 1)()
     assert(#steps == 1, "a filetype change cancels queued work")
-    vim.bo[buf].filetype = "lazyagent_acp"
+    filetype("lazyagent_acp")
     local clock = 0
     vim.uv.hrtime = function() clock = clock + 3000000; return clock end
     finished = false
@@ -71,9 +84,10 @@ function M.run()
       running = true
     end
     reparse()
+    local before = #steps
     vim.api.nvim_buf_delete(buf, { force = true })
     table.remove(callbacks, 1)()
-    assert(#callbacks == 0, "wiped buffers discard queued work safely")
+    assert(#steps == before and #callbacks == 0, "wiped buffers stop collection without requeuing work")
   end, debug.traceback)
   vim.schedule, vim.uv.hrtime, _G.collectgarbage = schedule, hrtime, gc
   if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end

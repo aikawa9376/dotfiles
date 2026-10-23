@@ -1412,7 +1412,7 @@ process_dropped_image_lines = function(bufnr)
 
   local cfg = image_paste_opts()
   local drop_cfg = cfg.drop or {}
-  if drop_cfg.enabled == false then
+  if drop_cfg.enabled ~= true then
     return
   end
 

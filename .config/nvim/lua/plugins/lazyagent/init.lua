@@ -161,7 +161,7 @@ return {
       dir_layout = "conversation",
       max_dimension = 1600,
       drop = {
-        enabled = true,
+        enabled = false,
         copy = true,
       },
       picker = {

@@ -189,7 +189,7 @@ function M.build()
         copy = true,
       },
       drop = {
-        enabled = true,
+        enabled = false,
         copy = true,
       },
       picker = {
