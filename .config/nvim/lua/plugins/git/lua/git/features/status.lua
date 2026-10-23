@@ -584,7 +584,10 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       end
     end
 
-    if pull_requests and #pull_requests > 0 then
+    if pull_requests and pull_requests.error then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Pull requests: unavailable · ' .. pull_requests.error)
+    elseif pull_requests and #pull_requests > 0 then
       local scope = pull_request_scope_by_buf[bufnr] or 'branch'
       local scope_label = scope == 'all'
         and 'all'
@@ -1182,6 +1185,7 @@ function M.setup(group)
         end)
       end
 
+      local fetch_pull_requests
       local function render_fast_status(reuse_cache, reuse_details)
         local work_tree = utils.get_buf_work_tree(b)
         if not work_tree then return end
@@ -1206,6 +1210,18 @@ function M.setup(group)
             insert_index_flag_warning(b, native_lines, previous.flag_state)
           end
 
+          local context = status_renderer.context(b)
+          local pr_context = { root = context.root, branch = context.branch }
+          local context_changed = not vim.deep_equal(pr_state.context, pr_context)
+          if context_changed then
+            pr_state.context = pr_context
+            pull_requests_by_buf[b] = nil
+            pull_request_scope_by_buf[b] = 'branch'
+            pull_request_branch_by_buf[b] = nil
+            local scopes = scope_state_by_buf[b]
+            if scopes then scopes.pr_manual, scopes.branch_pr_count = nil, nil end
+          end
+
           refresh({
             snapshot = {
               commit_lines = previous and previous.commit_lines or {},
@@ -1221,6 +1237,7 @@ function M.setup(group)
           })
 
           status_modules.refresh(b, status_renderer.context(b))
+          if not reuse_details or context_changed then fetch_pull_requests() end
 
           local function schedule_details()
             -- Let the lightweight status and commits reach the screen before
@@ -1265,15 +1282,16 @@ function M.setup(group)
         end)
       end
 
-      local fetch_pull_requests
       fetch_pull_requests = function()
         if not is_live() then return end
+        pr_state.generation = pr_state.generation + 1
         if pr_state.fetching then
           pr_state.pending = true
           return
         end
 
-        local work_tree = utils.get_buf_work_tree(b)
+        local context = pr_state.context
+        local work_tree = context and context.root
         if not work_tree or vim.fn.executable('gh') ~= 1 then return end
 
         pr_state.fetching = true
@@ -1288,6 +1306,14 @@ function M.setup(group)
           end
         end
 
+        local function failed(message)
+          if generation == pr_state.generation then
+            pull_requests_by_buf[b] = { error = tostring(message):gsub('[\r\n]', ' ') }
+            refresh_cached()
+          end
+          finish_fetch()
+        end
+
         local function request_pull_requests(branch, callback)
           local args = {
             'gh', 'pr', 'list', '--state', 'open',
@@ -1299,9 +1325,13 @@ function M.setup(group)
           vim.system(args, { cwd = work_tree, text = true }, function(result)
             vim.schedule(function()
               if not is_live() then return end
-              if result.code ~= 0 then callback(nil); return end
+              if generation ~= pr_state.generation then finish_fetch(); return end
+              if result.code ~= 0 then
+                failed(vim.trim(result.stderr or '') ~= '' and vim.trim(result.stderr) or 'GitHub CLI request failed')
+                return
+              end
               local ok, decoded = pcall(vim.json.decode, result.stdout or '')
-              if not ok or type(decoded) ~= 'table' then callback(nil); return end
+              if not ok or type(decoded) ~= 'table' then failed('Invalid JSON from GitHub CLI'); return end
               local pull_requests = {}
               for _, pr in ipairs(decoded) do
                 local number = tonumber(pr.number)
@@ -1342,45 +1372,36 @@ function M.setup(group)
           finish_fetch()
         end
 
-        vim.system({ 'git', 'branch', '--show-current' }, { cwd = work_tree, text = true }, function(result)
-          vim.schedule(function()
-            if not is_live() then return end
-            if result.code ~= 0 or generation ~= pr_state.generation then
-              finish_fetch()
-              return
-            end
-            local branch = vim.trim(result.stdout or '')
-            local function branch_ready(branch_prs)
-              if not branch_prs or generation ~= pr_state.generation then
-                finish_fetch()
-                return
-              end
-              local scope_state = scope_state_by_buf[b] or {}
-              scope_state_by_buf[b] = scope_state
-              local previous_count = scope_state.branch_pr_count
-              local count = #branch_prs
-              local increased = previous_count ~= nil and count > previous_count
-              if previous_count == nil or increased or (previous_count > 0 and count == 0) then
-                scope_state.pr_manual = false
-              end
-              scope_state.branch_pr_count = count
-              local scope = scope_state.pr_manual
-                and pr_state.manual_scope
-                or (count > 0 and 'branch' or 'all')
-              local reset_fold = previous_count == nil or increased
-              if scope == 'branch' then
-                publish(scope, branch ~= '' and branch or nil, branch_prs, reset_fold)
-              else
-                request_pull_requests(nil, function(all_prs)
-                  if not all_prs then finish_fetch(); return end
-                  publish(scope, nil, all_prs, reset_fold)
-                end)
-              end
-            end
-            if branch == '' then branch_ready({})
-            else request_pull_requests(branch, branch_ready) end
-          end)
-        end)
+        local branch = context.branch == '(detached)' and '' or (context.branch or '')
+        local function branch_ready(branch_prs)
+          if not branch_prs or generation ~= pr_state.generation then
+            finish_fetch()
+            return
+          end
+          local scope_state = scope_state_by_buf[b] or {}
+          scope_state_by_buf[b] = scope_state
+          local previous_count = scope_state.branch_pr_count
+          local count = #branch_prs
+          local increased = previous_count ~= nil and count > previous_count
+          if previous_count == nil or increased or (previous_count > 0 and count == 0) then
+            scope_state.pr_manual = false
+          end
+          scope_state.branch_pr_count = count
+          local scope = scope_state.pr_manual
+            and pr_state.manual_scope
+            or (count > 0 and 'branch' or 'all')
+          local reset_fold = previous_count == nil or increased
+          if scope == 'branch' then
+            publish(scope, branch ~= '' and branch or nil, branch_prs, reset_fold)
+          else
+            request_pull_requests(nil, function(all_prs)
+              if not all_prs then finish_fetch(); return end
+              publish(scope, nil, all_prs, reset_fold)
+            end)
+          end
+        end
+        if branch == '' then branch_ready({})
+        else request_pull_requests(branch, branch_ready) end
       end
 
       local function reload_status(reuse_details, cursor_anchors)
@@ -1390,12 +1411,13 @@ function M.setup(group)
         local anchors = cursor_anchors
           or (was_dirty and capture_status_cursors_before_reload(b) or capture_status_cursors(b))
         if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
+        if not reuse_details then pr_state.generation = pr_state.generation + 1 end
         render_fast_status(true, reuse_details)
-        if not reuse_details then fetch_pull_requests() end
       end
       status_reload_by_buf[b] = reload_status
       local function invalidate_status()
         if not is_live() then return end
+        pr_state.generation = pr_state.generation + 1
         if utils.is_buf_visible(b) then reload_status()
         else status_dirty_by_buf[b] = true end
       end
@@ -1429,7 +1451,6 @@ function M.setup(group)
         vim.api.nvim_buf_set_lines(b, 0, -1, false, { '' })
       end)
       render_fast_status(false)
-      fetch_pull_requests()
 
       vim.api.nvim_create_autocmd({ 'BufUnload', 'BufWipeout' }, {
         group = bufgroupt,
@@ -1556,13 +1577,7 @@ function M.setup(group)
         end)
       end
 
-      utils.setup_repo_refresh(bufgroupt, b, function()
-        if utils.is_buf_visible(b) then
-          reload_status()
-        else
-          status_dirty_by_buf[b] = true
-        end
-      end, {
+      utils.setup_repo_refresh(bufgroupt, b, invalidate_status, {
         ignore_source = true,
         refresh_on_enter = false,
       })

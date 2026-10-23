@@ -1194,6 +1194,22 @@ function M.open(opts)
   opts.root = utils.normalize_path(opts.root)
   local identity = opts.url or (opts.root .. '/' .. tostring(opts.number or 'current'))
   local requested = github.url_context(opts.url) or (opts.host and opts.repo and opts.number and opts)
+  if not opts.url and not opts.number then
+    -- Resolved PRs remain pinned, while an implicit lookup belongs to the
+    -- checked-out branch (and its optional worktree association).
+    local ref = vim.system({ 'git', 'symbolic-ref', '--quiet', 'HEAD' }, { cwd = opts.root, text = true }):wait()
+    if ref.code == 0 then
+      local branch = vim.trim(ref.stdout):gsub('^refs/heads/', '')
+      local saved = vim.system({ 'git', 'config', '--get', 'branch.' .. branch .. '.pullRequestUrl' },
+        { cwd = opts.root, text = true }):wait()
+      identity = identity .. '/' .. vim.trim(ref.stdout) .. '\0' .. (saved.code == 0 and vim.trim(saved.stdout) or '')
+      if saved.code == 0 then requested = github.url_context(vim.trim(saved.stdout)) end
+    else
+      local head = vim.system({ 'git', 'rev-parse', '--verify', 'HEAD' }, { cwd = opts.root, text = true }):wait()
+      if head.code ~= 0 then notify('Could not resolve the current Git HEAD'); return end
+      identity = identity .. '/detached/' .. vim.trim(head.stdout)
+    end
+  end
   for b, s in pairs(states) do
     local same_pr = requested and s.ctx.host == requested.host and s.ctx.repo == requested.repo and s.ctx.number == requested.number
     local same_seed = s.identity == identity and (not opts.host or s.ctx.host == opts.host) and (not opts.repo or s.ctx.repo == opts.repo)

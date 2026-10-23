@@ -512,6 +512,18 @@ API contracts: [Issues REST API](https://docs.github.com/en/rest/issues/issues),
 
 ### Pull requests
 
+Status PR lists use the repository and branch from the displayed Git snapshot.
+Checking out another branch clears the previous list and resets its manual
+branch/all scope. Replies from older refreshes are discarded. A failed lookup
+shows `Pull requests: unavailable` instead of retaining old PRs; `R` retries.
+Opening Status from another project's file selects that repository. An existing
+Git panel keeps its own repository when only the working directory changes.
+
+`:GitPr` without a selector reuses a view for the checked-out branch and its
+saved worktree PR association. A different branch opens its own PR view;
+returning to the original branch preserves its draft. Explicit PR numbers and
+URLs continue to select that PR independently of the current checkout.
+
 In PR status, `<Space><Space>`, `N` and `:GitHub` open a **PR actions** menu.
 It is the common entry point for the current PR, including the existing comment
 and review submenus. Opening it from a diff retains the source file/line when
