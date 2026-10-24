@@ -412,7 +412,9 @@ function M.run()
         thread_id = candidate.thread_id,
         command = fake_command,
         env = env,
-        request_timeout_ms = 60,
+        -- This also covers initialize, including starting the fixture process.
+        -- Leave enough startup time to reach the intended session/load failure.
+        request_timeout_ms = 500,
         session_bootstrap = bootstrap,
         cwd = root,
         root_dir = root,
