@@ -414,9 +414,26 @@ menu. `:GitHub` also opens it from a repository file. Status PR rows now show CI
 mergeability summaries; Enter opens the native PR status panel. Octo remains
 available through the GitHub menu as an alternative discussion/review UI.
 
+The menu loads related PR information asynchronously between the repository path
+and the Pull requests heading. Branch rows use the selected branch; Log, Reflog
+and Commit views use the selected commit. Status PR rows retain their explicit
+PR identity. The target is captured before opening the menu, including through
+`<Space><Space> N`, so later cursor/cwd changes cannot redirect it to HEAD.
+Repository files use the current branch. A stored PR worktree association takes
+precedence for that local branch; remote branch searches distinguish fork owners.
+Branch lookup includes open, closed and merged PRs; commit lookup uses GitHub's
+associated-PR endpoint. Both reads are bounded to 100 results with a limit hint.
+The header shows up to five PRs (number, state, title, head/base and CI/review
+summary when available); all matches remain selectable. One match opens directly,
+multiple matches prompt for a choice, and PR operations are disabled while
+loading, on lookup failure, or when their required PR state does not apply.
+Closing the menu cancels its read. `tests/github_related_menu.lua` covers these
+cursor/selection/lifetime boundaries with real local Git and mocked GitHub reads.
+
 | Repository GitHub menu key | Action |
 |---|---|
-| `p` / `l` | Open current/selected PR status / choose an open PR |
+| `p` / `b` | Open related PR status / open related PR in browser (choose if multiple) |
+| `l` | Choose an open PR from the repository |
 | `C` | Create default PR: edit only the prefilled title |
 | `c` | Create a PR using Octo's editor |
 | `e` / `r` | Open in Octo / start or resume an Octo review |
@@ -2412,7 +2429,18 @@ frame's display state. The float closes on return to an unpinned working-tree
 frame without explicit info, and on session exit. The `gk`
 float removes Git’s trailing separator blank lines while preserving message
 paragraphs. It is independent and anchors to the selected code row, choosing above/below
-to fit the window. Both floats adjust to resizing/scrolling.
+to fit the window. It initially fits only the commit message, without reserving
+space for PR information. Related PRs for the attributed commit load
+asynchronously through the same bounded lookup as the GitHub menu, then append
+their number, state, title and head/base branches. The same window expands to
+fit the new content (up to 80 columns and the code-window height limit), counting
+wrapped rows, including wide characters. No matches leave the message and size
+unchanged; lookup errors appear inline.
+Completed results are cached per commit for the session; `R` clears this cache.
+Changing commits, closing the float, switching to a diff or leaving blame cancels
+pending PR reads; uncommitted lines do not query GitHub. Both floats adjust to
+resizing/scrolling. `tests/blame_pr_preview.lua` verifies deferred sizing and
+cursor/lifetime isolation with real local Git and controlled GitHub responses.
 
 `C`, `gf`, `gk`, `Ctrl-p`, and paired history keys also work in the code pane. Existing
 buffer-local mappings are restored when the session ends. Initial working-tree

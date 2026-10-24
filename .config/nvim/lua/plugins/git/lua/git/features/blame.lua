@@ -219,6 +219,7 @@ local pending_opens = {}
 local serial = 0
 local ui_ns = vim.api.nvim_create_namespace('git_blame_panel')
 local selected_ns = vim.api.nvim_create_namespace('git_blame_selected')
+local preview_pr_ns = vim.api.nvim_create_namespace('git_blame_preview_pr')
 local function valid(win) return win and vim.api.nvim_win_is_valid(win) end
 local function tell(message) vim.notify(message, vim.log.levels.INFO) end
 local function local_options(win, opts)
@@ -227,9 +228,16 @@ end
 local function view(win)
   return vim.api.nvim_win_call(win, vim.fn.winsaveview)
 end
+local function cancel_preview_pr(s)
+  local request = s.preview_pr
+  s.preview_pr = nil
+  if request and request.task then request.task.cancel() end
+end
 local function close_float(s)
-  if valid(s.float_win) then vim.api.nvim_win_close(s.float_win, true) end
+  cancel_preview_pr(s)
+  local win = s.float_win
   s.float_win = nil
+  if valid(win) then vim.api.nvim_win_close(win, true) end
 end
 local function adjacent_same_commit_block(f, commit, row, direction, count)
   if direction > 0 then
@@ -259,9 +267,13 @@ local function current(s)
   return f and f.rows[row], f, row
 end
 local function preview(s)
-  if not s.active or not s.preview or not valid(s.win) then return end
+  if not s.active or not s.preview or not valid(s.win) or not valid(s.code_win) then return end
   local r, f = current(s)
   if not r then close_float(s); return end
+  local message = s.preview == 'message'
+  if not message or r.uncommitted or (s.preview_pr and s.preview_pr.commit ~= r.commit) then
+    cancel_preview_pr(s)
+  end
   local key = s.preview .. r.commit .. r.path
   local lines = s.messages[key]
   if not lines then
@@ -282,14 +294,24 @@ local function preview(s)
     while #lines > 1 and lines[#lines]:match('^%s*$') do table.remove(lines) end
     if not r.uncommitted then s.messages[key] = lines end
   end
+  local prs = message and not r.uncommitted and s.preview_prs[r.commit]
+  if prs then lines = vim.list_extend(vim.list_extend({}, lines), prs) end
   local row = select(3, current(s))
-  local height = math.max(1, math.min(#lines, vim.api.nvim_win_get_height(s.code_win) - 4))
+  local max_height = math.max(1, vim.api.nvim_win_get_height(s.code_win) - 4)
+  local height = math.max(1, math.min(#lines, max_height))
+  local width = math.max(1, math.min(80, vim.api.nvim_win_get_width(s.code_win) - 4))
+  local title = message and ' Commit message · gk ' or ' Commit diff · Ctrl-p '
+  if message then
+    local natural_width = vim.fn.strdisplaywidth(title)
+    for _, line in ipairs(lines) do natural_width = math.max(natural_width, vim.fn.strdisplaywidth(line)) end
+    width = math.min(width, natural_width)
+  end
   local config = {
     relative = 'win', win = s.code_win,
-    width = math.max(1, math.min(80, vim.api.nvim_win_get_width(s.code_win) - 4)),
+    width = width,
     height = height, row = 1, col = 1, anchor = 'NW',
     style = 'minimal', border = 'rounded', focusable = false,
-    title = s.preview == 'message' and ' Commit message · gk ' or ' Commit diff · Ctrl-p ',
+    title = title,
     zindex = 60,
   }
   if s.preview == 'message' then
@@ -302,6 +324,17 @@ local function preview(s)
     local b = vim.api.nvim_create_buf(false, true)
     vim.bo[b].bufhidden = 'wipe'
     s.float_win = vim.api.nvim_open_win(b, false, config)
+    local win = s.float_win
+    vim.api.nvim_create_autocmd('BufWipeout', { group = s.group, buffer = b, once = true, callback = function()
+      if s.float_win == win then
+        s.float_win, s.preview = nil, nil
+        cancel_preview_pr(s)
+      end
+    end })
+  elseif message then
+    -- Keep the measured height until the new text is ready. Resetting it to
+    -- the buffer line count would resize twice on every layout event.
+    if vim.api.nvim_win_get_width(s.float_win) ~= width then vim.api.nvim_win_set_width(s.float_win, width) end
   else
     vim.api.nvim_win_set_config(s.float_win, config)
   end
@@ -310,10 +343,55 @@ local function preview(s)
   vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
   vim.bo[b].modifiable = false
   vim.bo[b].filetype = s.preview == 'message' and 'gitcommit' or 'diff'
+  vim.api.nvim_buf_clear_namespace(b, preview_pr_ns, 0, -1)
+  for index, line in ipairs(prs or {}) do
+    if line:match('^#%d+ ') then
+      -- PR numbers start with #, which gitcommit syntax treats as comments.
+      vim.api.nvim_buf_set_extmark(b, preview_pr_ns, #lines - #prs + index - 1, 0, {
+        end_col = #line, hl_group = 'Normal', priority = 200,
+      })
+    end
+  end
   local_options(s.float_win, { wrap = s.preview == 'message', list = false, spell = false })
   if s.preview == 'message' and vim.diagnostic and vim.diagnostic.enable then
     vim.diagnostic.enable(false, { bufnr = b })
   end
+  if message then
+    -- Measure actual wrapped rows after painting, including wide characters.
+    config.height = math.max(1, math.min(max_height, vim.api.nvim_win_text_height(s.float_win, {
+      start_row = 0, end_row = #lines - 1,
+    }).all))
+    local screen_row = vim.fn.screenpos(s.code_win, row, 1).row
+    local bottom = vim.api.nvim_win_get_position(s.code_win)[1] + vim.api.nvim_win_get_height(s.code_win)
+    config.anchor, config.row = 'NW', 1
+    if screen_row + config.height + 2 > bottom then config.anchor, config.row = 'SW', 0 end
+    vim.api.nvim_win_set_config(s.float_win, config)
+  end
+  if not message or r.uncommitted or prs or s.preview_pr then return end
+  local request = { commit = r.commit }
+  s.preview_pr = request
+  local related = require('git.features.github_related')
+  local function publish(ok, result)
+    if s.preview_pr ~= request or not s.active then return end
+    s.preview_pr = nil
+    local extra = { '', 'Pull requests' }
+    if not ok then extra[#extra + 1] = 'Could not load PR information: ' .. related.clean(result)
+    elseif #result.items == 0 then extra = {}
+    else
+      for _, pr in ipairs(result.items) do extra[#extra + 1] = related.label(pr) end
+      if result.limited then extra[#extra + 1] = 'PR lookup limited to 100 results' end
+    end
+    s.preview_prs[request.commit] = extra
+    if #extra == 0 then return end
+    local selected = current(s)
+    if s.preview == 'message' and valid(s.float_win) and selected and selected.commit == request.commit
+      and vim.api.nvim_win_get_tabpage(s.win) == vim.api.nvim_get_current_tabpage() then preview(s) end
+  end
+  local task, err = require('git.features.async').run(s.root, function()
+    return related.load({ root = s.root, commit = request.commit })
+  end, publish)
+  request.task = task
+  if not task then publish(false, err) end
 end
 local function history_info(s, refresh)
   local f = s.history[s.index]
@@ -847,7 +925,12 @@ bind = function(s, b, code)
   map({ '<CR>', '<2-LeftMouse>', 'i' }, function() open_commit(s, 'tab') end)
   map('o', function() open_commit(s, 'split') end)
   map('O', function() open_commit(s, 'tab') end)
-  map('R', function() refresh_worktree(s) end)
+  map('R', function()
+    cancel_preview_pr(s)
+    s.preview_prs = {}
+    refresh_worktree(s)
+    preview(s)
+  end)
   local function toggle_recency()
     vim.g.git_blame_gradient_mode = vim.g.git_blame_gradient_mode == 'absolute' and 'relative' or 'absolute'
     local f = s.history[s.index]; if f then paint(s, f); highlight_selected(s) end
@@ -1030,7 +1113,7 @@ function M.open(opts)
     local_options(win, { winbar = panel_winbar, cursorline = false, winfixwidth = true, list = false, number = false, relativenumber = false, wrap = false, foldenable = false, foldcolumn = '0', signcolumn = 'no', scrollbind = false, cursorbind = false })
     local s = { id = serial, buf = b, win = win, code_win = code_win, origin = origin, root = root,
       origin_view = origin_view, origin_hidden = origin_hidden, options = options, active = true, generation = 0, history = {}, index = 0,
-      messages = {}, maps = {}, owned = {}, group = vim.api.nvim_create_augroup('GitBlame' .. b, { clear = true }) }
+      messages = {}, preview_prs = {}, maps = {}, owned = {}, group = vim.api.nvim_create_augroup('GitBlame' .. b, { clear = true }) }
     sessions[b] = s
     bind(s, b); bind(s, origin, true)
     vim.api.nvim_create_autocmd('CursorMoved', { group = s.group, callback = function(ev)
@@ -1052,6 +1135,8 @@ function M.open(opts)
       end, 20)
       s.preview_generation = (s.preview_generation or 0) + 1
       local generation = s.preview_generation
+      local selected = current(s)
+      if s.preview_pr and (not selected or selected.commit ~= s.preview_pr.commit) then cancel_preview_pr(s) end
       vim.defer_fn(function() if s.active and generation == s.preview_generation then preview(s) end end, 80)
     end })
     vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI', 'BufWritePost' }, { group = s.group, buffer = origin, callback = function()

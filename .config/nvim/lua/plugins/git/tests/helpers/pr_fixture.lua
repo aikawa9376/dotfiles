@@ -58,7 +58,7 @@ function M.new()
       if vim.tbl_contains(argv, '--repo') and (not argv[4] or argv[4]:sub(1, 1) == '-') then
         error_code = 1; raw = ''
       else data = vim.deepcopy(f.pr) end
-    elseif argv[2] == 'pr' and argv[3] == 'list' then data = { f.pr }
+    elseif argv[2] == 'pr' and argv[3] == 'list' then data = vim.deepcopy(f.prs or { f.pr })
     elseif argv[2] == 'pr' and argv[3] == 'create' then raw = f.pr.url .. '\n'
     elseif argv[2] == 'run' then data = f.runs or { { databaseId = 11, name = 'Tests', status = 'completed', conclusion = 'failure', url = 'https://ghe.example.test/org/repo/actions/runs/11', headBranch = 'topic' } }
     elseif argv[2] == 'api' then

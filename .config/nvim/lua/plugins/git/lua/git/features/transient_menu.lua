@@ -49,6 +49,13 @@ function M.show(spec, opts)
   end
   local function render()
     if not vim.api.nvim_buf_is_valid(buf) then return end
+    local selected
+    if win and vim.api.nvim_win_is_valid(win) then
+      local cursor = vim.api.nvim_win_get_cursor(win)
+      for _, cell in ipairs(rows[cursor[1]] or {}) do
+        if cursor[2] >= cell.start_col then selected = cell.action end
+      end
+    end
     lines, rows, headings = {}, {}, {}
     -- Width measurement, painting, and highlights must use the same snapshot.
     local snapshots = {}
@@ -69,6 +76,12 @@ function M.show(spec, opts)
     if spec.title then lines[#lines + 1] = fit_text(spec.title, available) end
     if spec.context and spec.context ~= '' then
       lines[#lines + 1] = fit_text(spec.context, available)
+    end
+    local info_highlights = {}
+    for _, line in ipairs(spec.info or {}) do
+      local entry = type(line) == 'table' and line or { text = line }
+      lines[#lines + 1] = fit_text(entry.text, available)
+      info_highlights[#lines] = entry.hl_group
     end
     if #lines > 0 then lines[#lines + 1] = '' end
     local groups = vim.tbl_filter(function(group) return #group.actions > 0 end, spec.groups or {})
@@ -154,6 +167,10 @@ function M.show(spec, opts)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modifiable = false
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    for row, group in pairs(info_highlights) do
+      vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0,
+        { end_col = #lines[row], hl_group = group })
+    end
     if spec.title then
       vim.api.nvim_buf_set_extmark(buf, ns, 0, 0,
         { end_col = #lines[1], hl_group = 'Title' })
@@ -211,6 +228,13 @@ function M.show(spec, opts)
       end
     end
     if win and vim.api.nvim_win_is_valid(win) then
+      if selected then
+        for row, cells in pairs(rows) do
+          for _, cell in ipairs(cells) do
+            if cell.action == selected then vim.api.nvim_win_set_cursor(win, { row, cell.start_col }) end
+          end
+        end
+      end
       local height = math.min(#lines, math.max(vim.o.lines - 5, 1))
       if (opts.layout or layout()) == 'float' then
         local width = 46

@@ -46,6 +46,10 @@ function M.runs(opts)
       '--json', 'databaseId,name,displayTitle,status,conclusion,url,headBranch,headSha' }
     local pr
     if ctx.number then pr = github.pr(ctx); vim.list_extend(args, { '--commit', pr.headRefOid })
+    elseif ctx.commit then vim.list_extend(args, { '--commit', ctx.commit })
+    elseif ctx.branch and ctx.branch_kind ~= 'tags' then
+      local branch = ctx.branch_kind == 'remote' and ctx.branch:gsub('^[^/]+/', '') or ctx.branch
+      vim.list_extend(args, { '--branch', branch })
     else
       local branch = require('git.features.async').git(ctx.root, { 'branch', '--show-current' })
       if branch and vim.trim(branch) ~= '' then vim.list_extend(args, { '--branch', vim.trim(branch) }) end

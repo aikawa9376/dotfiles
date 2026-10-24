@@ -19,6 +19,15 @@ function M.context(buf)
     pr = require('git.features.status').pull_request_at(buf, vim.fn.line('.'))
     if pr then ctx.url = pr.url end
   end
+  if not ctx.url and ctx.resource_kind ~= 'issue' then
+    local target = require('git.features.magit_actions').context(buf)
+    if target then
+      ctx.branch, ctx.branch_kind, ctx.commit = target.branch, target.branch_kind, target.commit
+      ctx.root = target.target_worktree or ctx.root
+      ctx.no_target = vim.tbl_contains({ 'branch', 'log', 'reflog', 'commit' }, target.panel)
+        and not (ctx.branch or ctx.commit) or nil
+    end
+  end
   ctx.bufnr = buf
   return ctx
 end
@@ -193,6 +202,8 @@ end
 function M.open(opts)
   opts = vim.deepcopy(opts or M.context())
   local source = opts.bufnr or vim.api.nvim_get_current_buf()
+  opts.root = opts.root or utils.get_buf_work_tree(source) or utils.get_work_tree({ bufnr = source })
+  opts.bufnr = source
   if vim.api.nvim_buf_is_valid(source) and vim.bo[source].filetype == 'gitissue' then
     local issue = require('git.features.issue')
     local current = issue.model(source)
@@ -224,33 +235,103 @@ function M.open(opts)
     return require('git.features.transient_menu').show({ kind = 'pr-actions', title = 'PR actions',
       context = opts.url or opts.root or '', groups = groups })
   end
+  local related = require('git.features.github_related')
+  local state = { items = {} }
+  local function choose(callback, predicate)
+    local items = vim.tbl_filter(predicate or function() return true end, state.items)
+    local function selected(pr)
+      if not pr then return end
+      -- Resolve all subsequent actions by this exact URL, even after cursor/cwd changes.
+      local target = { root = opts.root, bufnr = source, url = pr.url }
+      callback(target, pr)
+    end
+    if #items == 1 then selected(items[1])
+    elseif #items > 1 then
+      vim.ui.select(items, { prompt = 'Related pull requests', format_item = related.label }, selected)
+    end
+  end
+  local function pr_action(key, label, callback, predicate)
+    return { key = key, label = label, enabled = false, reason = 'PR information is still loading',
+      predicate = predicate, run = function() choose(callback, predicate) end }
+  end
+  local function is_open(pr) return pr.state == 'OPEN' end
   local actions = {
-    { key = 'p', label = 'Current / selected PR status', run = function() require('git.features.pr').open(opts) end },
+    pr_action('p', 'Open PR', function(target) require('git.features.pr').open(target) end),
+    pr_action('b', 'Open PR in browser', function(target) vim.ui.open(target.url) end),
     { key = 'l', label = 'List pull requests', run = function() M.list(opts) end },
     { key = 'C', label = 'Create default PR (title only)', run = function() M.create_quick(opts) end },
     { key = 'c', label = 'Create PR (Octo editor)', run = function()
       octo_command(opts, 'Octo pr create')
     end },
-    { key = 'e', label = 'Edit / discuss in Octo', run = function() M.octo(opts) end },
-    { key = 'r', label = 'Review in Octo', run = function() M.octo(opts, true) end },
-    { key = 'w', label = 'Checkout PR in new worktree', run = function() M.worktree(opts) end },
-    { key = 'k', label = 'CI checks', run = function()
-      require('git.features.github_checks').checks(opts)
+    pr_action('e', 'Edit / discuss in Octo', function(target) M.octo(target) end),
+    pr_action('r', 'Review in Octo', function(target) M.octo(target, true) end, is_open),
+    pr_action('w', 'Checkout PR in new worktree', function(target) M.worktree(target) end),
+    pr_action('k', 'CI checks', function(target) require('git.features.github_checks').checks(target) end),
+    { key = 'a', label = 'GitHub Actions runs', run = function()
+      if #state.items > 0 then
+        choose(function(target) require('git.features.github_checks').runs(target) end)
+      else
+        require('git.features.github_checks').runs(vim.tbl_extend('force', opts, { repository_only = true }))
+      end
     end },
-    { key = 'a', label = 'GitHub Actions runs', run = function() require('git.features.github_checks').runs(opts) end },
-    { key = 'd', label = 'Toggle draft / ready', run = function() M.modify(opts, 'ready') end },
-    { key = 'm', label = 'Merge PR…', run = function() M.merge(opts) end },
-    { key = 'x', label = 'Close / reopen PR', run = function() M.lifecycle(opts) end },
-    { key = 'M', label = 'PR labels / assignees / review requests…', run = function()
-      M.run(opts, github.pr, function(_, ctx) require('git.features.pr_metadata').menu(ctx) end)
-    end },
+    pr_action('d', 'Toggle draft / ready', function(target) M.modify(target, 'ready') end, is_open),
+    pr_action('m', 'Merge PR…', function(target) M.merge(target) end, is_open),
+    pr_action('x', 'Close / reopen PR', function(target, pr) M.lifecycle(target, pr.state) end,
+      function(pr) return pr.state ~= 'MERGED' end),
+    pr_action('M', 'PR labels / assignees / review requests…', function(target)
+      M.run(target, github.pr, function(_, ctx) require('git.features.pr_metadata').menu(ctx) end)
+    end),
     { key = 'i', label = 'List Issues (native)', run = function() require('git.features.issue_actions').list(opts) end },
     { key = 'I', label = 'Create Issue (native)', run = function() require('git.features.issue_actions').create(opts) end },
     { key = 'o', label = 'Issues (Octo)', run = function() octo_command(opts, 'Octo issue list') end },
     { key = 'n', label = 'Notifications (Octo)', run = function() octo_command(opts, 'Octo notification list') end },
   }
-  return require('git.features.transient_menu').show({ kind = 'github', title = 'GitHub',
-    context = opts.url or opts.root or '', groups = { { title = 'Pull requests', actions = actions } } })
+  local function target_info()
+    if opts.commit then return { 'Commit: ' .. opts.commit } end
+    if opts.branch then return { 'Ref: ' .. related.clean(opts.branch) } end
+    return {}
+  end
+  local spec = { kind = 'github', title = 'GitHub', context = opts.url or opts.root or '',
+    info = target_info(), groups = { { title = 'Pull requests', actions = actions } } }
+  spec.info[#spec.info + 1] = 'PR: Loading…'
+  local ui = require('git.features.transient_menu').show(spec)
+  local function publish(ok, result)
+    if not vim.api.nvim_buf_is_valid(ui.bufnr) then return end
+    state.items = ok and result.items or {}
+    spec.info = target_info()
+    if not ok then spec.info[#spec.info + 1] = 'PR: Could not load — ' .. related.clean(result)
+    elseif #state.items == 0 then
+      spec.info[#spec.info + 1] = { text = 'PR: No related pull requests', hl_group = 'Comment' }
+    else
+      for index, pr in ipairs(state.items) do
+        if index > 5 then
+          spec.info[#spec.info + 1] = ('… %d more PRs (p to choose)'):format(#state.items - 5); break
+        end
+        spec.info[#spec.info + 1] = related.label(pr)
+        if pr.statusCheckRollup ~= nil then spec.info[#spec.info + 1] = '  ' .. github.summary(pr) end
+      end
+    end
+    if ok and result.limited then spec.info[#spec.info + 1] = 'PR lookup limited to 100 results' end
+    for _, action in ipairs(actions) do
+      if action.reason then
+        local matches = vim.tbl_filter(action.predicate or function() return true end, state.items)
+        action.enabled = #matches > 0
+        action.reason = not ok and 'Could not load PR information'
+          or #state.items == 0 and 'No matching PR is available'
+          or 'This action is unavailable for the related PR state'
+        if action.key == 'p' then action.label = #matches > 1 and ('Open PR… (%d)'):format(#matches) or 'Open PR'
+        elseif action.key == 'x' and #matches == 1 then
+          action.label = matches[1].state == 'CLOSED' and 'Reopen PR' or 'Close PR'
+        end
+      end
+    end
+    ui.render()
+  end
+  local task, err = async.run(opts.root, function() return related.load(opts) end, publish)
+  if not task then publish(false, err) end
+  vim.api.nvim_create_autocmd('BufWipeout', { buffer = ui.bufnr, once = true,
+    callback = function() if task then task.cancel() end end })
+  return ui
 end
 function M.attach(buf)
   vim.keymap.set('n', 'N', function() M.open(M.context(buf)) end,

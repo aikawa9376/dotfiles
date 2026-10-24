@@ -1181,8 +1181,9 @@ function M.open(bufnr, selection)
   operations[#operations + 1] = { key = '!', label = 'Custom Git commands…', run = function(ui)
     require('git.features.custom_commands').open(ctx, ui, show_submenu)
   end }
+  local github_context = require('git.features.github_actions').context(bufnr)
   operations[#operations + 1] = { key = 'N', label = 'GitHub / pull requests…', run = function()
-    require('git.features.github_actions').open(require('git.features.github_actions').context(bufnr))
+    require('git.features.github_actions').open(github_context)
   end }
   operations[#operations + 1] = { key = 'I', label = 'Repository setup…', run = function()
     require('git.features.repository_init').open({ base = ctx.work_tree })
