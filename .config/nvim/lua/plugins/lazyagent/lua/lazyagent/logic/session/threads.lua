@@ -1,5 +1,7 @@
 local M = {}
 local identity = require("lazyagent.logic.session.identity")
+local process = require("lazyagent.acp.process")
+local cockpit = require("lazyagent.acp.cockpit")
 
 function M.setup(deps)
   local state = deps.state
@@ -11,6 +13,7 @@ function M.setup(deps)
   local resolve_active_acp_session = deps.resolve_active_acp_session
   local editor_registry = deps.editor_registry or require("lazyagent.acp.editor_registry")
   local module = {}
+  local reopening_threads = {}
   local thread_label
 
   local function normalize_path(path)
@@ -175,14 +178,19 @@ function M.setup(deps)
     return false
   end
 
-  local function process_state(pid)
-    pid = tonumber(pid)
-    if not pid or pid <= 0 then return false end
-    local ok, result, err, code = pcall((vim.uv or vim.loop).kill, pid, 0)
-    if not ok then return nil, result end
-    if result == 0 then return true end
-    if code == "ESRCH" then return false end
-    return nil, err or code
+  local function owner_options()
+    return { owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id }
+  end
+
+  local function recover_stopped_thread(backend, thread)
+    if thread.status ~= "active" or local_session_key(thread.thread_id)
+      or cockpit.thread_status(thread, nil, owner_options()) ~= "closed"
+    then
+      return thread
+    end
+    return backend.update_thread(thread.thread_id, {
+      status = "closed", process_id = vim.NIL,
+    }, { expected_process_id = thread.process_id or vim.NIL, preserve_updated_at = true })
   end
 
   local function claim_restart_thread(backend, thread, expected_process_id)
@@ -202,37 +210,77 @@ function M.setup(deps)
     return nil, "owner_changed"
   end
 
-  function module.close_disconnected_thread(thread_id)
+  function module.close_disconnected_thread(thread_id, on_closed)
     local backend, thread = thread_backend(thread_id)
     if not backend or not thread then
       vim.notify("LazyAgent ACP: thread not found: " .. tostring(thread_id), vim.log.levels.WARN)
       return false
     end
-    if thread.status ~= "active" or thread.process_id == nil then
+    if thread.status ~= "active" or local_session_key(thread_id) then
       vim.notify("LazyAgent ACP: selected thread is not disconnected", vim.log.levels.INFO)
       return false
     end
-    local alive, process_err = process_state(thread.process_id)
-    if alive == true then
-      vim.notify("LazyAgent ACP: process is still running; refusing to detach its thread", vim.log.levels.WARN)
+    local status = cockpit.thread_status(thread, nil, owner_options())
+    if status == "external" then
+      vim.notify("LazyAgent ACP: this thread is controlled by another live Neovim; stop it there", vim.log.levels.WARN)
       return false
     end
-    if alive == nil then
-      vim.notify("LazyAgent ACP: cannot verify process state: " .. tostring(process_err), vim.log.levels.WARN)
+    local function finish()
+      local updated, err = backend.update_thread(thread.thread_id, {
+        status = "closed", process_id = vim.NIL,
+      }, { expected_process_id = thread.process_id or vim.NIL })
+      if not updated then
+        vim.notify("LazyAgent ACP: failed to recover disconnected thread: " .. tostring(
+          type(err) == "table" and err.code or err
+        ), vim.log.levels.ERROR)
+        return false
+      end
+      vim.notify("LazyAgent ACP: thread is now closed and can be resumed", vim.log.levels.INFO)
+      if on_closed then on_closed() end
+      return true
+    end
+    if status == "closed" then return finish() end
+    local info = process.inspect(thread.process_id)
+    if info.alive ~= true or tonumber(thread.process_id) == vim.fn.getpid() then
+      vim.notify("LazyAgent ACP: cannot safely stop this process: " .. tostring(info.error or thread.process_id), vim.log.levels.WARN)
       return false
     end
-    local expected_process_id = thread.process_id
-    local updated, err = backend.update_thread(thread.thread_id, {
-      status = "closed",
-      process_id = vim.NIL,
-    }, { expected_process_id = expected_process_id })
-    if not updated then
-      vim.notify("LazyAgent ACP: failed to recover disconnected thread: " .. tostring(
-        type(err) == "table" and err.code or err
-      ), vim.log.levels.ERROR)
-      return false
-    end
-    vim.notify("LazyAgent ACP: disconnected thread is now closed and can be resumed", vim.log.levels.INFO)
+    vim.ui.select({ "Cancel", "Stop process and close thread" }, {
+      prompt = "Stop disconnected ACP process " .. tostring(thread.process_id) .. "? History will be kept.",
+    }, function(choice)
+      if choice ~= "Stop process and close thread" then return end
+      local latest = backend.get_thread(thread_id)
+      if not latest or latest.process_id ~= thread.process_id or local_session_key(thread_id)
+        or cockpit.thread_status(latest, nil, owner_options()) == "external"
+      then
+        vim.notify("LazyAgent ACP: thread ownership changed; refresh before retrying", vim.log.levels.WARN)
+        return
+      end
+      local current = process.inspect(thread.process_id)
+      if current.alive == false or (info.identity and current.identity and info.identity ~= current.identity) then
+        finish()
+        return
+      end
+      if current.alive ~= true then return end
+      local ok, result, err = pcall((vim.uv or vim.loop).kill, tonumber(thread.process_id), "sigterm")
+      if not ok or result ~= 0 then
+        vim.notify("LazyAgent ACP: failed to stop process: " .. tostring(err or result), vim.log.levels.WARN)
+        return
+      end
+      local attempts = 0
+      local function await_exit()
+        local remaining = process.inspect(thread.process_id)
+        if remaining.alive == false or (info.identity and remaining.identity and info.identity ~= remaining.identity) then
+          finish()
+        elseif attempts < 40 then
+          attempts = attempts + 1
+          vim.defer_fn(await_exit, 50)
+        else
+          vim.notify("LazyAgent ACP: process has not exited; history is kept and the thread remains disconnected", vim.log.levels.WARN)
+        end
+      end
+      await_exit()
+    end)
     return true
   end
 
@@ -260,15 +308,46 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: provider is not configured: " .. tostring(thread.provider_id), vim.log.levels.WARN)
       return false
     end
-    local local_key = local_session_key(thread.thread_id)
+    local local_key, local_session = local_session_key(thread.thread_id)
+    local local_backend = local_session and state.backends and state.backends[local_session.backend]
+    local snapshot = local_backend and type(local_backend.get_runtime_snapshot) == "function"
+      and local_backend.get_runtime_snapshot(local_session.pane_id) or nil
+    if local_key and snapshot and snapshot.acp_failed == true
+      and cockpit.thread_status(thread, snapshot, owner_options()) == "closed"
+    then
+      if reopening_threads[thread_id] then return true end
+      reopening_threads[thread_id] = true
+      close_session(local_key)
+      local attempts = 0
+      local function reopen()
+        local key, current = local_session_key(thread_id)
+        if not key then
+          reopening_threads[thread_id] = nil
+          module.open_thread(thread_id, opts)
+        elseif current == local_session and attempts < 30 then
+          attempts = attempts + 1
+          vim.defer_fn(reopen, 100)
+        else
+          reopening_threads[thread_id] = nil
+          vim.notify("LazyAgent ACP: session cleanup is not complete; refresh before resuming", vim.log.levels.WARN)
+        end
+      end
+      reopen()
+      return true
+    end
     if thread.status == "active" and thread.process_id ~= nil and not local_key and opts.restart_process_id ~= nil then
       local claimed, claim_err = claim_restart_thread(backend, thread, opts.restart_process_id)
       if not claimed then return false, claim_err end
       thread = claimed
     end
+    if not local_key and thread.status == "active" then
+      local recovered, recover_err = recover_stopped_thread(backend, thread)
+      if not recovered then return false, recover_err end
+      thread = recovered
+    end
     if thread.status == "active" and thread.process_id ~= nil and not local_key then
       vim.notify(
-        "LazyAgent ACP: live thread belongs to another Neovim or is disconnected; stop it there or force delete it first",
+        "LazyAgent ACP: process is still running; use Cockpit x to stop a disconnected thread, or stop it in its owning Neovim",
         vim.log.levels.WARN
       )
       return false
@@ -799,8 +878,20 @@ function M.setup(deps)
 
     local cockpit_winid = vim.api.nvim_get_current_win()
     local line_map = {}
+    local controls = {}
+    local group_rows = {}
+    local expanded_groups = {}
+    local collapsed_groups = {}
+    local attention_only = false
+    local snoozed = {}
+    local fingerprints, fingerprint_pending, fingerprint_checks = {}, {}, {}
+    local review_jobs = {}
+    local pending_refresh = false
     local stored_threads = {}
     local query = ""
+    local view_name
+    local view_store = require("lazyagent.acp.cockpit_views").new({ dir =
+      (((state.opts or {}).cache or {}).dir or (vim.fn.stdpath("cache") .. "/lazyagent")) .. "/acp/cockpit-views" })
     local warned_conflicts = ""
     local thread_agents = {}
     local runtimes = {}
@@ -808,12 +899,16 @@ function M.setup(deps)
     local preview_winid
     local preview_enabled = true
     local preview_mode = "summary"
+    local detail_section = "overview"
     local preview_layout = require("lazyagent.acp.cockpit").normalize_preview_layout(
       ((state.opts or {}).acp or {}).cockpit_preview_layout or (state.opts or {}).cockpit_preview_layout
     )
     local preview_thread_id
     local preview_signature
     local preview_timer
+    local preview_delay_timer = (vim.uv or vim.loop).new_timer()
+    local preview_generation = 0
+    local preview_pending = false
     local refreshing = false
     local creating_preview = false
     local original_acp_winhighlights = {}
@@ -844,6 +939,13 @@ function M.setup(deps)
         vim.bo[preview_bufnr].bufhidden = "wipe"
         vim.bo[preview_bufnr].swapfile = false
         vim.bo[preview_bufnr].filetype = "markdown"
+        for _, key in ipairs({ "K", "<Tab>", "C", "gC", "Q", "A", "t", "m", "Z", "V", "u", "w", "S", "F", "gF" }) do
+          vim.keymap.set("n", key, function()
+            if not vim.api.nvim_buf_is_valid(bufnr) then return end
+            local mapping = vim.api.nvim_buf_call(bufnr, function() return vim.fn.maparg(key, "n", false, true) end)
+            if type(mapping.callback) == "function" then mapping.callback() end
+          end, { buffer = preview_bufnr, silent = true })
+        end
       end
       vim.api.nvim_set_current_win(cockpit_winid)
       local selected = stored_thread(line_map[vim.api.nvim_win_get_cursor(cockpit_winid)[1]])
@@ -974,6 +1076,9 @@ function M.setup(deps)
       if selected then return thread_workspace(selected) end
       if vim.api.nvim_win_is_valid(cockpit_winid) then
         local row = vim.api.nvim_win_get_cursor(cockpit_winid)[1]
+        for index = row, 1, -1 do
+          if group_rows[index] then return group_rows[index] end
+        end
         local lines = vim.api.nvim_buf_get_lines(bufnr, 0, row, false)
         for index = #lines, 1, -1 do
           local label = lines[index]:match("^## (.+)$")
@@ -1072,6 +1177,15 @@ function M.setup(deps)
             vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· Mirror · "
               .. tostring(thread.provider_id or "Agent") .. " · " .. title .. " "
           end
+        elseif preview_mode == "details" then
+          preview_thread_id, preview_signature = thread.thread_id, nil
+          local _, current_thread = thread_backend(thread.thread_id)
+          thread = current_thread or thread
+          lines = require("lazyagent.acp.cockpit_details").render(thread, runtimes[thread.thread_id], detail_section, {
+            owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id,
+            snoozed = snoozed, fingerprints = fingerprints, fingerprint_pending = fingerprint_pending,
+          })
+          vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· " .. detail_section .. " "
         else
           lines = { "# " .. tostring(thread.provider_id or "Agent") .. " · " .. title, "" }
           local height = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
@@ -1085,6 +1199,7 @@ function M.setup(deps)
           end
         end
       end
+      preview_thread_id = thread and thread.thread_id or nil
       local previous_count = vim.api.nvim_buf_line_count(preview_bufnr)
       local follow = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
         and vim.api.nvim_win_get_cursor(preview_winid)[1] >= previous_count
@@ -1100,10 +1215,64 @@ function M.setup(deps)
       end
     end
 
+    local function cancel_preview_delay()
+      preview_generation = preview_generation + 1
+      preview_pending = false
+      if preview_delay_timer then preview_delay_timer:stop() end
+    end
+
+    local function schedule_preview()
+      cancel_preview_delay()
+      if not preview_enabled or not preview_delay_timer then return end
+      local generation = preview_generation
+      local thread_id = selected_thread_id()
+      preview_pending = true
+      preview_delay_timer:start(500, 0, vim.schedule_wrap(function()
+        if generation ~= preview_generation then return end
+        preview_pending = false
+        if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_win_is_valid(cockpit_winid)
+          or vim.api.nvim_win_get_tabpage(cockpit_winid) ~= vim.api.nvim_get_current_tabpage()
+          or selected_thread_id() ~= thread_id
+        then return end
+        update_preview(thread_id)
+      end))
+    end
+
     local function cockpit_width()
       local windows = vim.fn.win_findbuf(bufnr)
       local winid = windows[1]
       return math.max(40, (winid and vim.api.nvim_win_get_width(winid) or vim.o.columns) - 1)
+    end
+
+    local function invalidate_fingerprint(root)
+      local check = fingerprint_checks[root]
+      if check then
+        check.checked_at = 0
+        if check.pending then check.invalidated = true end
+      end
+    end
+    local function check_fingerprints()
+      for _, thread in ipairs(stored_threads) do
+        local result = thread.metadata and thread.metadata.test_result
+        local review = thread.metadata and thread.metadata.cockpit_review
+        local root = thread.cwd
+        local needs_test = result and type(result.fingerprint) == "string" and result.status ~= "running"
+        local needs_review = require("lazyagent.acp.cockpit_review").enabled(thread)
+          and review.state == "done" and type(review.fingerprint) == "string"
+        if root and (needs_test or needs_review) then
+          local check = fingerprint_checks[root]
+          if not check or (not check.pending and os.time() - check.checked_at >= 5) then
+            check = { pending = true, checked_at = os.time() }
+            fingerprint_checks[root], fingerprint_pending[root] = check, true
+            check.job = require("lazyagent.acp.workspace_fingerprint").capture(root, function(fingerprint)
+              check.pending, check.job = false, nil
+              check.checked_at = check.invalidated and 0 or os.time()
+              fingerprints[root], fingerprint_pending[root] = not check.invalidated and fingerprint or nil, nil
+              if vim.api.nvim_buf_is_valid(bufnr) then pending_refresh = true end
+            end)
+          end
+        end
+      end
     end
     refresh = function()
       if refreshing or creating_preview then return end
@@ -1135,6 +1304,12 @@ function M.setup(deps)
           end
         end
       end
+      for index, thread in ipairs(stored_threads) do
+        if not runtimes[thread.thread_id] then
+          stored_threads[index] = recover_stopped_thread(backend, thread) or thread
+        end
+      end
+      check_fingerprints()
       local highlights
       local live_open_thread_id = identity.thread_id(
         state.open_agent,
@@ -1146,13 +1321,19 @@ function M.setup(deps)
         current_open_thread_id = nil
       end
       local render_opts = {
+        query = query, view_name = view_name,
         width = cockpit_width(),
         open_thread_id = current_open_thread_id,
         owner_pid = vim.fn.getpid(),
         owner_instance_id = state.editor_instance_id,
         current_root = current_root,
+        expanded_groups = expanded_groups,
+        history_limit = (((state.opts or {}).acp or {}).cockpit_history_limit),
+        process_cache = {},
+        attention_only = attention_only, snoozed = snoozed, collapsed_groups = collapsed_groups,
+        fingerprints = fingerprints, fingerprint_pending = fingerprint_pending,
       }
-      lines, line_map, highlights = require("lazyagent.acp.cockpit").render(
+      lines, line_map, highlights, controls, group_rows = require("lazyagent.acp.cockpit").render(
         require("lazyagent.acp.cockpit").filter(stored_threads, query, runtimes, render_opts),
         runtimes,
         render_opts
@@ -1180,19 +1361,27 @@ function M.setup(deps)
           end
         end
       end
-      update_preview(restored_selection and selected_id or selected_thread_id())
+      if preview_pending then
+        schedule_preview()
+      else
+        update_preview(restored_selection and selected_id or selected_thread_id())
+      end
       update_acp_backgrounds()
       refreshing = false
     end
 
-    local function jump_live(delta)
+    local function jump_live(delta, attention)
       local rows = {}
       for line, id in pairs(line_map) do
-        if thread_agents[id] then rows[#rows + 1] = line end
+        local thread = stored_thread(id)
+        if (not attention and thread_agents[id]) or (attention and thread and cockpit.needs_attention(thread, runtimes[id], {
+          owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id,
+          snoozed = snoozed, fingerprints = fingerprints, fingerprint_pending = fingerprint_pending,
+        })) then rows[#rows + 1] = line end
       end
       table.sort(rows)
       if #rows == 0 then
-        vim.notify("LazyAgent ACP: no live threads", vim.log.levels.INFO)
+        vim.notify(attention and "LazyAgent ACP: no threads need attention" or "LazyAgent ACP: no live threads", vim.log.levels.INFO)
         return
       end
       local current = vim.api.nvim_win_get_cursor(cockpit_winid)[1]
@@ -1205,13 +1394,182 @@ function M.setup(deps)
         target = target or rows[#rows]
       end
       vim.api.nvim_win_set_cursor(cockpit_winid, { target, 0 })
-      update_preview(line_map[target])
+      schedule_preview()
       update_acp_backgrounds()
     end
 
+    vim.keymap.set("n", "f", function()
+      attention_only = not attention_only
+      view_name = nil
+      cancel_preview_delay()
+      refresh()
+      local rows = vim.tbl_keys(line_map)
+      table.sort(rows)
+      if rows[1] then vim.api.nvim_win_set_cursor(cockpit_winid, { rows[1], 0 }); schedule_preview() end
+    end, { buffer = bufnr, silent = true, desc = "Toggle attention-only Cockpit" })
+    vim.keymap.set("n", "]e", function() jump_live(1, true) end, { buffer = bufnr, desc = "Next thread needing attention" })
+    vim.keymap.set("n", "[e", function() jump_live(-1, true) end, { buffer = bufnr, desc = "Previous thread needing attention" })
+    vim.keymap.set("n", "za", function()
+      local path = selected_workspace()
+      if not path then return end
+      collapsed_groups[path] = not collapsed_groups[path]
+      cancel_preview_delay()
+      refresh()
+      for row, group in pairs(group_rows) do
+        if group == path then vim.api.nvim_win_set_cursor(cockpit_winid, { row, 0 }); break end
+      end
+    end, { buffer = bufnr, desc = "Collapse or expand workspace" })
+    vim.keymap.set("n", "Z", function()
+      local id = selected_thread_id()
+      local thread = stored_thread(id)
+      if not thread then return end
+      local attention = cockpit.attention(thread, runtimes[id], {
+        owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id, fingerprints = fingerprints,
+      })
+      if snoozed[id] then snoozed[id] = nil
+      else snoozed[id] = { signature = attention.signature, until_at = os.time() + 900 } end
+      refresh()
+    end, { buffer = bufnr, desc = "Snooze attention for 15 minutes or unsnooze" })
+    vim.keymap.set("n", "m", function()
+      local id = selected_thread_id()
+      local target_backend, thread = thread_backend(id)
+      local completion = thread and thread.metadata and thread.metadata.cockpit_completion
+      if not target_backend or not completion then return end
+      target_backend.update_thread(id, { metadata = { cockpit_ack_completion = completion.id } }, { preserve_updated_at = true })
+      refresh()
+    end, { buffer = bufnr, desc = "Acknowledge completed response" })
+    vim.keymap.set("n", "V", function()
+      cancel_preview_delay()
+      preview_enabled, preview_mode, detail_section = true, "details", "since"
+      refresh()
+    end, { buffer = bufnr, desc = "Show changes since last check" })
+    vim.keymap.set("n", "gC", function()
+      local id = selected_thread_id()
+      local target_backend = thread_backend(id)
+      if not id or not target_backend or type(target_backend.show_thread_changes_since_check) ~= "function" then return end
+      local opened, err = target_backend.show_thread_changes_since_check(id)
+      if not opened then vim.notify(tostring(err), vim.log.levels.WARN) end
+    end, { buffer = bufnr, desc = "Compare recorded code since last check" })
+    vim.keymap.set("n", "u", function()
+      local id = selected_thread_id()
+      local target_backend = thread_backend(id)
+      if not id or not target_backend or type(target_backend.mark_thread_observed) ~= "function" then return end
+      local updated, err = target_backend.mark_thread_observed(id)
+      if not updated then
+        vim.notify(type(err) == "table" and (err.message or err.code) or tostring(err), vim.log.levels.WARN)
+      end
+      refresh()
+    end, { buffer = bufnr, desc = "Mark recorded history checked without approving changes" })
+    vim.keymap.set("n", "w", function()
+      local id = selected_thread_id()
+      local target_backend, thread = thread_backend(id)
+      if not thread or type(target_backend.set_thread_review_state) ~= "function" then return end
+      local Review = require("lazyagent.acp.cockpit_review")
+      local version = Review.version(thread)
+      local tracked = Review.enabled(thread)
+      local choices = tracked and {
+        { state = "not_started", label = "Not started" },
+        { state = "reviewing", label = "Reviewing" },
+        { state = "changes_requested", label = "Changes requested" },
+        { state = "done", label = "Review done" },
+        { state = "off", label = "Disable review tracking for this session" },
+      } or { { state = "not_started", label = "Enable review tracking for this session" } }
+      vim.ui.select(choices, { prompt = "Review tracking:", format_item = function(item) return item.label end }, function(choice)
+        if not choice or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        local function save(fingerprint)
+          if not vim.api.nvim_buf_is_valid(bufnr) then return end
+          local updated, err = target_backend.set_thread_review_state(id, choice.state, {
+            fingerprint = fingerprint, expected_version = choice.state == "done" and version or nil,
+            require_enabled = tracked and choice.state ~= "off",
+          })
+          if not updated then
+            vim.notify(type(err) == "table" and (err.message or err.code) or tostring(err), vim.log.levels.WARN)
+          end
+          invalidate_fingerprint(thread.cwd)
+          pending_refresh = true
+        end
+        if choice.state ~= "done" then save(); refresh(); return end
+        local job
+        job = require("lazyagent.acp.workspace_fingerprint").capture(thread.cwd, function(fingerprint, err)
+          if job then review_jobs[job] = nil end
+          if fingerprint then save(fingerprint)
+          elseif vim.api.nvim_buf_is_valid(bufnr) then vim.notify(tostring(err), vim.log.levels.WARN) end
+        end)
+        if job then review_jobs[job] = true end
+      end)
+    end, { buffer = bufnr, desc = "Set thread review state" })
+    vim.keymap.set("n", "K", function()
+      cancel_preview_delay()
+      preview_enabled = true
+      preview_mode = preview_mode == "details" and "summary" or "details"
+      if preview_mode == "details" then invalidate_fingerprint(selected_workspace()) end
+      refresh()
+    end, { buffer = bufnr, desc = "Toggle thread details" })
+    vim.keymap.set("n", "<Tab>", function()
+      local sections = { "overview", "changes", "tests", "queue", "since" }
+      local index = 1
+      for i, section in ipairs(sections) do if section == detail_section then index = i end end
+      detail_section = sections[index % #sections + 1]
+      cancel_preview_delay()
+      preview_enabled, preview_mode = true, "details"
+      if detail_section == "tests" then invalidate_fingerprint(selected_workspace()) end
+      refresh()
+    end, { buffer = bufnr, desc = "Next thread detail section" })
+    vim.keymap.set("n", "C", function()
+      local id = selected_thread_id()
+      if id then module.show_thread_changes(id) end
+    end, { buffer = bufnr, desc = "Review selected thread changes" })
+    vim.keymap.set("n", "Q", function()
+      local key, session = local_session_key(selected_thread_id())
+      local target_backend = key and state.backends[session.backend]
+      if target_backend and type(target_backend.show_prompt_queue) == "function" then
+        target_backend.show_prompt_queue(session.pane_id)
+      end
+    end, { buffer = bufnr, desc = "Manage selected thread prompt queue" })
+    vim.keymap.set("n", "A", function()
+      local key, session = local_session_key(selected_thread_id())
+      local target_backend = key and state.backends[session.backend]
+      if not target_backend or type(target_backend.get_pending_permission) ~= "function" then return end
+      local pending = target_backend.get_pending_permission(session.pane_id)
+      if not pending then
+        vim.notify("LazyAgent ACP: no active permission request; questions and authentication use the shared input dialog", vim.log.levels.INFO)
+        return
+      end
+      vim.ui.select(pending.choices, {
+        prompt = pending.title,
+        format_item = function(choice) return choice.label end,
+      }, function(choice)
+        if not choice then return end
+        local current = target_backend.get_pending_permission(session.pane_id)
+        if not current or current.request_id ~= pending.request_id then
+          vim.notify("LazyAgent ACP: permission request changed or expired", vim.log.levels.WARN)
+          return
+        end
+        local accepted, err = target_backend.respond_permission(session.pane_id, choice.option_id, choice.scope, pending.request_id)
+        if not accepted then vim.notify(tostring(err), vim.log.levels.WARN) end
+        pending_refresh = true
+      end)
+    end, { buffer = bufnr, desc = "Respond to current permission request" })
+
     vim.keymap.set("n", "<CR>", function()
+      local control = controls[vim.api.nvim_win_get_cursor(cockpit_winid)[1]]
+      if control then
+        expanded_groups[control.path] = not control.expanded
+        cancel_preview_delay()
+        refresh()
+        if control.expanded then
+          for row, item in pairs(controls) do
+            if item.path == control.path then
+              vim.api.nvim_win_set_cursor(cockpit_winid, { row, 0 })
+              break
+            end
+          end
+        end
+        return
+      end
       local thread_id = selected_thread_id()
       if not thread_id then return end
+      cancel_preview_delay()
       preview_enabled = true
       preview_mode = preview_mode == "mirror" and "summary" or "mirror"
       preview_signature = nil
@@ -1226,6 +1584,7 @@ function M.setup(deps)
     local function open_selected_thread(focus_agent_view)
       local thread_id = selected_thread_id()
       if thread_id then
+        cancel_preview_delay()
         if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
           preview_enabled = false
           vim.api.nvim_win_close(preview_winid, true)
@@ -1318,6 +1677,7 @@ function M.setup(deps)
       buffer = bufnr, silent = true, desc = "Previous live ACP thread",
     })
     vim.keymap.set("n", "P", function()
+      cancel_preview_delay()
       if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
         preview_enabled = false
         vim.api.nvim_win_close(preview_winid, true)
@@ -1329,6 +1689,7 @@ function M.setup(deps)
       end
     end, { buffer = bufnr, silent = true, desc = "Toggle ACP cockpit preview" })
     vim.keymap.set("n", "s", function()
+      cancel_preview_delay()
       preview_layout = preview_layout == "split" and "horizontal" or "split"
       if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
         vim.api.nvim_win_close(preview_winid, true)
@@ -1348,7 +1709,10 @@ function M.setup(deps)
       if id then module.branch_thread(id) end
       refresh()
     end, { buffer = bufnr, silent = true, desc = "Branch selected ACP thread at its latest completed turn" })
-    vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
+    vim.keymap.set("n", "r", function()
+      for root in pairs(fingerprint_checks) do invalidate_fingerprint(root) end
+      refresh()
+    end, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
     vim.keymap.set("n", "R", function()
       local id = selected_thread_id()
       if id then module.prompt_rename_thread(id, refresh) end
@@ -1357,7 +1721,9 @@ function M.setup(deps)
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       local agent_name = id and thread_agents[id] or nil
       if not agent_name then
-        if id and module.close_disconnected_thread(id) then refresh() end
+        if id then module.close_disconnected_thread(id, function()
+          if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+        end) end
         return
       end
       vim.ui.select({ "Cancel", "Stop" }, { prompt = "Stop this ACP process?" }, function(choice)
@@ -1370,9 +1736,70 @@ function M.setup(deps)
     end, { buffer = bufnr, silent = true, desc = "Stop selected ACP cockpit process" })
     vim.keymap.set("n", "/", function()
       vim.ui.input({ prompt = "Filter ACP cockpit: ", default = query }, function(value)
-        if value ~= nil then query = value; refresh() end
+        if value == nil or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        local compiled, err = require("lazyagent.acp.cockpit_query").compile(value)
+        if not compiled then vim.notify(err, vim.log.levels.WARN); return end
+        query, view_name = value, nil
+        cancel_preview_delay()
+        refresh()
       end)
     end, { buffer = bufnr, silent = true, desc = "Filter ACP cockpit" })
+    vim.keymap.set("n", "S", function()
+      local saved_query, saved_attention = query, attention_only
+      vim.ui.input({ prompt = "Save Cockpit view as: ", default = view_name or "" }, function(name)
+        if not name or vim.trim(name) == "" or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        name = vim.trim(name)
+        local existing, read_err = view_store:get(name)
+        if read_err then vim.notify(read_err, vim.log.levels.WARN); return end
+        local function save()
+          if not vim.api.nvim_buf_is_valid(bufnr) then return end
+          local saved, err = view_store:save(name, saved_query, saved_attention)
+          if not saved then vim.notify(err, vim.log.levels.WARN); return end
+          if query == saved_query and attention_only == saved_attention then view_name = saved.name end
+          refresh()
+        end
+        if existing then
+          vim.ui.select({ "Cancel", "Overwrite" }, { prompt = "Replace saved view '" .. name .. "'?" }, function(choice)
+            if choice == "Overwrite" then save() end
+          end)
+        else save() end
+      end)
+    end, { buffer = bufnr, desc = "Save current Cockpit filter and attention view" })
+    vim.keymap.set("n", "F", function()
+      local saved, err = view_store:list()
+      if err then vim.notify(err, vim.log.levels.WARN) end
+      if not saved then return end
+      local items = {
+        { name = "All threads", query = "", attention_only = false, builtin = true },
+        { name = "Needs attention", query = "", attention_only = true, builtin = true },
+        { name = "Current workspace", query = "workspace:current", attention_only = false, builtin = true },
+      }
+      vim.list_extend(items, saved)
+      vim.ui.select(items, { prompt = "Cockpit view:", format_item = function(item)
+        return (item.builtin and "[Built-in] " or "") .. item.name .. (item.query ~= "" and (" · " .. item.query) or "")
+      end }, function(choice)
+        if not choice or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        query, attention_only = choice.query, choice.attention_only
+        view_name = choice.name
+        cancel_preview_delay()
+        refresh()
+      end)
+    end, { buffer = bufnr, desc = "Choose saved or built-in Cockpit view" })
+    vim.keymap.set("n", "gF", function()
+      local saved, err = view_store:list()
+      if err then vim.notify(err, vim.log.levels.WARN) end
+      if not saved or #saved == 0 then return end
+      vim.ui.select(saved, { prompt = "Delete saved Cockpit view:", format_item = function(item) return item.name end }, function(choice)
+        if not choice or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        vim.ui.select({ "Cancel", "Delete" }, { prompt = "Delete saved view '" .. choice.name .. "'?" }, function(answer)
+          if answer ~= "Delete" or not vim.api.nvim_buf_is_valid(bufnr) then return end
+          local deleted, delete_err = view_store:delete(choice.name)
+          if not deleted then vim.notify(delete_err, vim.log.levels.WARN); return end
+          if view_name == choice.name then view_name = nil end
+          refresh()
+        end)
+      end)
+    end, { buffer = bufnr, desc = "Delete saved Cockpit view" })
     vim.keymap.set("n", "p", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       local target_backend, thread = thread_backend(id)
@@ -1384,25 +1811,18 @@ function M.setup(deps)
       end
     end, { buffer = bufnr, silent = true, desc = "Pin ACP cockpit thread" })
     vim.keymap.set("n", "t", function()
-      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      local id = selected_thread_id()
       local target_backend, thread = thread_backend(id)
       if not target_backend or not thread then return end
       local previous = thread.metadata and thread.metadata.test_result and thread.metadata.test_result.command or ""
       vim.ui.input({ prompt = "Test command: ", default = previous }, function(command)
         if not command or command == "" then return end
-        local argv, argv_err = require("lazyagent.acp.worktree_test").argv(command)
-        if not argv then vim.notify(argv_err, vim.log.levels.ERROR); return end
-        local started = vim.uv.hrtime() / 1000000
-        target_backend.update_thread(id, { metadata = { test_result = { command = command, status = "running" } } })
-        refresh()
-        vim.system(argv, { cwd = thread.cwd, text = true }, function(result)
-          vim.schedule(function()
-            local finished = vim.uv.hrtime() / 1000000
-            local test_result = require("lazyagent.acp.worktree_test").finish(command, started, result, finished)
-            target_backend.update_thread(id, { metadata = { test_result = test_result } })
-            if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
-          end)
+        local accepted, err = require("lazyagent.acp.worktree_test").run(target_backend, thread, command, function()
+          invalidate_fingerprint(thread.cwd)
+          if vim.api.nvim_buf_is_valid(bufnr) then pending_refresh = true end
         end)
+        if not accepted then vim.notify(tostring(err), vim.log.levels.WARN) end
+        refresh()
       end)
     end, { buffer = bufnr, silent = true, desc = "Run ACP thread test" })
     vim.keymap.set("n", "a", function()
@@ -1459,7 +1879,7 @@ function M.setup(deps)
     vim.keymap.set("n", "?", function()
       local thread = stored_thread(selected_thread_id())
       local items = {
-        { key = "<CR>", description = "Toggle latest response / transcript mirror" },
+        { key = "<CR>", description = "Expand/collapse history or toggle latest response / mirror" },
         { key = "o", description = "Open or resume thread in Cockpit tab" },
         { key = "O", description = "Open or resume thread and focus agent" },
         { key = "n", description = "Create agent in the project Neovim" },
@@ -1472,7 +1892,10 @@ function M.setup(deps)
         { key = "P", description = "Show or hide preview" },
         { key = "s", description = "Toggle side / horizontal preview layout" },
         { key = "x", description = "Stop selected process" },
-        { key = "/", description = "Filter threads" },
+        { key = "/", description = "Filter threads (e.g. status:running unread:true)" },
+        { key = "S", description = "Save filter and attention view" },
+        { key = "F", description = "Choose saved or built-in view" },
+        { key = "gF", description = "Delete saved view" },
         { key = "p", description = "Pin or unpin thread" },
         { key = "t", description = "Run thread test" },
         { key = "a", description = "Archive or restore thread" },
@@ -1483,6 +1906,21 @@ function M.setup(deps)
         { key = "r", description = "Refresh cockpit" },
         { key = "R", description = "Rename thread" },
         { key = "q", description = "Close cockpit" },
+        { key = "f", description = "Toggle attention-only view" },
+        { key = "]e", description = "Next thread needing attention" },
+        { key = "[e", description = "Previous thread needing attention" },
+        { key = "za", description = "Collapse or expand workspace" },
+        { key = "Z", description = "Snooze attention for 15 minutes / unsnooze" },
+        { key = "m", description = "Acknowledge completed response" },
+        { key = "K", description = "Toggle thread details" },
+        { key = "<Tab>", description = "Next detail section" },
+        { key = "C", description = "Review selected thread changes" },
+        { key = "gC", description = "Compare recorded code since last check" },
+        { key = "Q", description = "Manage selected thread queue" },
+        { key = "A", description = "Respond to active permission request" },
+        { key = "w", description = "Set review state" },
+        { key = "V", description = "Show changes since last check" },
+        { key = "u", description = "Mark recorded history checked" },
       }
       local explicit_actions = require("lazyagent.acp.cockpit").explicit_activation_actions(
         thread, capability_runtime(thread)
@@ -1515,7 +1953,7 @@ function M.setup(deps)
     vim.api.nvim_create_autocmd("CursorMoved", {
       buffer = bufnr,
       callback = function()
-        update_preview()
+        schedule_preview()
         update_acp_backgrounds()
       end,
     })
@@ -1523,15 +1961,74 @@ function M.setup(deps)
       buffer = bufnr,
       callback = refresh,
     })
+    vim.api.nvim_create_autocmd("User", {
+      group = preview_augroup,
+      pattern = { "LazyAgentACPAttentionChanged", "LazyAgentTurnDone", "LazyAgentChangeJournal", "LazyAgentSessionStopped", "LazyAgentCockpitReview" },
+      callback = function()
+        for root in pairs(fingerprint_checks) do invalidate_fingerprint(root) end
+        pending_refresh = true
+      end,
+    })
+    vim.api.nvim_create_autocmd("BufWritePost", {
+      group = preview_augroup,
+      callback = function(args)
+        for root, check in pairs(fingerprint_checks) do
+          if path_in_workspace(args.file, root) then invalidate_fingerprint(root); pending_refresh = true end
+        end
+      end,
+    })
+    local last_activity_poll, last_activity_detail = 0, 0
     preview_timer = vim.uv.new_timer()
     preview_timer:start(300, 300, vim.schedule_wrap(function()
-      if preview_mode ~= "mirror" or not vim.api.nvim_buf_is_valid(bufnr) then return end
-      pcall(update_preview, nil, false)
+      if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_win_is_valid(cockpit_winid)
+        or vim.api.nvim_win_get_tabpage(cockpit_winid) ~= vim.api.nvim_get_current_tabpage() then return end
+      local now = os.time()
+      if not preview_pending and now ~= last_activity_poll then
+        last_activity_poll = now
+        for id, agent_name in pairs(thread_agents) do
+          local active = state.sessions and state.sessions[agent_name]
+          local active_backend = active and state.backends and state.backends[active.backend]
+          if active_backend and type(active_backend.get_cockpit_activity) == "function" then
+            local data = active_backend.get_cockpit_activity(active.pane_id)
+            local runtime = runtimes[id]
+            if data and runtime then
+              if not runtime.acp_activity or data.signature ~= runtime.acp_activity.signature then pending_refresh = true end
+              runtime.acp_activity = data
+            end
+          end
+        end
+        -- Receipt-time changes during streaming do not refresh the persisted list.
+        if not pending_refresh and preview_mode == "details" and now - last_activity_detail >= 5
+          and selected_thread_id() == preview_thread_id then
+          last_activity_detail = now
+          pcall(update_preview, preview_thread_id, false)
+        end
+      end
+      for id, snooze in pairs(snoozed) do
+        if snooze.until_at <= os.time() then snoozed[id] = nil; pending_refresh = true end
+      end
+      if pending_refresh and not preview_pending then
+        pending_refresh = false
+        refresh()
+      end
+      if preview_mode ~= "mirror" or preview_pending or not vim.api.nvim_buf_is_valid(bufnr)
+        or not vim.api.nvim_win_is_valid(cockpit_winid)
+        or vim.api.nvim_win_get_tabpage(cockpit_winid) ~= vim.api.nvim_get_current_tabpage()
+        or selected_thread_id() ~= preview_thread_id
+      then return end
+      pcall(update_preview, preview_thread_id, false)
     end))
     vim.api.nvim_create_autocmd("BufWipeout", {
       buffer = bufnr,
       once = true,
       callback = function()
+        for job in pairs(review_jobs) do pcall(job.kill, job, 15) end
+        for _, check in pairs(fingerprint_checks) do if check.job then pcall(check.job.kill, check.job, 15) end end
+        cancel_preview_delay()
+        if preview_delay_timer then
+          preview_delay_timer:close()
+          preview_delay_timer = nil
+        end
         restore_acp_backgrounds()
         pcall(vim.api.nvim_del_augroup_by_id, preview_augroup)
         if preview_timer then

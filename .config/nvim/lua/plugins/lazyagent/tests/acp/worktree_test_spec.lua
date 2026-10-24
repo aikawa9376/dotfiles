@@ -7,6 +7,12 @@ function M.run()
   assert(passed.status == "passed" and passed.duration_ms == 250 and passed.output == "ok", "passed test result")
   local failed = Test.finish("make test", 0, { code = 2, stdout = "out", stderr = "err" }, 10)
   assert(failed.status == "failed" and failed.exit_code == 2 and failed.output == "out\nerr", "failed test result")
+  assert(Test.status(passed) == "unknown", "legacy result without verification is unknown")
+  passed.fingerprint = "before"
+  assert(Test.status(passed, "before") == "passed", "matching workspace is passed")
+  assert(Test.status(passed, "after") == "stale", "different workspace is stale")
+  passed.verification_error = "capture failed"
+  assert(Test.status(passed, "before") == "unknown", "verification errors do not certify a pass")
 end
 
 return M

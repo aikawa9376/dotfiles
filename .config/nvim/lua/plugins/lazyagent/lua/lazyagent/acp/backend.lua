@@ -707,8 +707,12 @@ local function create_backend(default_view)
       return false
     end
     session.pending_brain_turn = nil
-    finish_change_turn(session, pending.failure and "failed" or "completed")
+    local finished = finish_change_turn(session, pending.failure and "failed" or "completed")
     if not pending.failure then
+      sync_thread_record(session, { metadata = { cockpit_completion = {
+        id = finished and finished.turn_id or tostring((vim.uv or vim.loop).hrtime()),
+        finished_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+      } } })
       util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
       actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
       config_helpers.maybe_save_turn_to_brain(session, pending.prompt, pending.start_seq)
@@ -771,6 +775,7 @@ local function create_backend(default_view)
     local prompt = queued_prompt.text
 
     session.preparing_prompt = true
+    require("lazyagent.acp.cockpit_activity").record(session, "prompt")
     config_helpers.maybe_apply_auto_switch(session, prompt, function()
       if next(session.tool_calls or {}) == nil then
         complete_pending_turn(session)
@@ -809,6 +814,7 @@ local function create_backend(default_view)
       end
       vim.list_extend(blocks, actions_helpers.build_prompt_blocks(session, prompt))
       session.client:send_prompt(blocks, function(result, err)
+        require("lazyagent.acp.cockpit_activity").record(session, "response")
         session.busy = false
         local cancel_requested = session.cancel_requested == true
         session.cancel_requested = false
@@ -1288,6 +1294,7 @@ local function create_backend(default_view)
     end
     if not pending then return nil end
     return {
+      request_id = pending.request_id,
       tool_call_id = pending.tool_call_id,
       title = pending.title,
       kind = pending.kind,
@@ -1296,7 +1303,7 @@ local function create_backend(default_view)
     }
   end
 
-  function backend.respond_permission(pane_id, option_id, scope)
+  function backend.respond_permission(pane_id, option_id, scope, expected_request_id)
     local session = get_session(pane_id)
     local pending = session and session.pending_permission or nil
     if pending and session.client and next(session.client.pending_permission_requests or {}) == nil then
@@ -1304,6 +1311,9 @@ local function create_backend(default_view)
       pending = nil
     end
     if not pending or type(pending.respond) ~= "function" then return nil, "permission request is no longer pending" end
+    if expected_request_id ~= nil and pending.request_id ~= expected_request_id then
+      return nil, "permission request has changed"
+    end
     return pending.respond(option_id, scope)
   end
 
@@ -1356,7 +1366,76 @@ local function create_backend(default_view)
       return nil, err or ("thread not found: " .. tostring(thread_id))
     end
     thread = repair_thread_change_blobs(thread)
-    return change_review.open(thread)
+    local opened, open_err = change_review.open(thread)
+    local review = thread.metadata and thread.metadata.cockpit_review or {}
+    if opened and review.state == "not_started" and require("lazyagent.acp.cockpit_review").enabled(thread) then
+      backend.set_thread_review_state(thread_id, "reviewing", { require_enabled = true })
+    end
+    return opened, open_err
+  end
+
+  function backend.mark_thread_observed(thread_id)
+    local stored, err = thread_store:get(thread_id)
+    if not stored then return nil, err end
+    local Review = require("lazyagent.acp.cockpit_review")
+    local observation = Review.snapshot(live_thread_record(thread_id) or stored, { include_code = true })
+    observation.observed_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    local updated, update_err = backend.update_thread(thread_id, { metadata = { cockpit_observation = observation } }, {
+      expected_cockpit_version = Review.version(stored),
+      replace_metadata_fields = { "cockpit_observation" }, preserve_updated_at = true,
+    })
+    if updated then util.fire_event("CockpitReview", { thread_id = thread_id }) end
+    return updated, update_err
+  end
+
+  function backend.show_thread_changes_since_check(thread_id)
+    local stored, err = thread_store:get(thread_id)
+    if not stored then return nil, err end
+    local thread = live_thread_record(thread_id) or stored
+    -- Checkpoints are shared with other editors; combine their latest marker
+    -- with this editor's possibly unpersisted active journal.
+    thread.metadata = stored.metadata
+    return require("lazyagent.acp.cockpit_diff").open(thread, blob_store)
+  end
+
+  function backend.set_thread_review_state(thread_id, review_state, opts)
+    opts = opts or {}
+    local Review = require("lazyagent.acp.cockpit_review")
+    if not Review.states[review_state] then return nil, "Unsupported review state" end
+    local stored, err = thread_store:get(thread_id)
+    if not stored then return nil, err end
+    if opts.require_enabled and not Review.enabled(stored) then return nil, "Review tracking is disabled" end
+    local expected = opts.expected_version or Review.version(stored)
+    if Review.version(stored) ~= expected then return nil, "Thread changed; refresh before confirming" end
+    local thread = live_thread_record(thread_id) or stored
+    if review_state == "done" then
+      if type(opts.fingerprint) ~= "string" then return nil, "Verify the workspace before marking review done" end
+      local owned = false
+      for _, session in pairs(sessions) do
+        if session.thread_id == thread_id then
+          owned = true
+          if session.busy or session.preparing_prompt or session.current_change_turn_id or #(session.prompt_queue or {}) > 0 then
+            return nil, "Wait for the active turn and queued prompts before marking review done"
+          end
+        end
+      end
+      if stored.status == "active" and stored.process_id ~= nil and not owned then
+        return nil, "Review can be completed only for stopped or locally idle threads"
+      end
+      for _, turn in ipairs(thread.change_journal and thread.change_journal.turns or {}) do
+        if turn.state == "active" then return nil, "Wait for the active turn before marking review done" end
+      end
+    end
+    local review = {
+      thread_id = thread_id, enabled = review_state ~= "off", state = review_state,
+      revision = review_state ~= "off" and Review.code_revision(thread) or nil,
+      fingerprint = review_state == "done" and opts.fingerprint or nil, changed_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    }
+    local updated, update_err = backend.update_thread(thread_id, { metadata = { cockpit_review = review } }, {
+      expected_cockpit_version = expected, replace_metadata_fields = { "cockpit_review" }, preserve_updated_at = true,
+    })
+    if updated then util.fire_event("CockpitReview", { thread_id = thread_id }) end
+    return updated, update_err
   end
 
   function backend.toggle_follow_agent(pane_id)
@@ -1504,6 +1583,7 @@ local function create_backend(default_view)
       backend.update_thread(thread_id, { change_journal = thread.change_journal })
       return nil, "failed to queue review feedback"
     end
+    backend.set_thread_review_state(thread_id, "changes_requested", { require_enabled = true })
     return cleared_turn
   end
 
@@ -1842,6 +1922,11 @@ local function create_backend(default_view)
     return nil
   end
 
+  function backend.get_cockpit_activity(pane_id)
+    local session = get_session(pane_id)
+    return session and require("lazyagent.acp.cockpit_activity").snapshot(session) or nil
+  end
+
   function backend.get_runtime_snapshot(pane_id, opts)
     if opts == true then
       opts = { full = true }
@@ -1905,6 +1990,7 @@ local function create_backend(default_view)
       acp_thread_unread = session.thread_record and session.thread_record.unread == true or false,
       acp_session_info = vim.deepcopy(session.session_info or {}),
       acp_goal = vim.deepcopy(session.goal),
+      acp_activity = backend.get_cockpit_activity(pane_id),
       acp_subagents = vim.deepcopy(session.subagents or {}),
       acp_async_tasks = vim.deepcopy(session.async_tasks or {}),
       acp_plan = vim.deepcopy(session.current_plan or {}),
@@ -1931,6 +2017,8 @@ local function create_backend(default_view)
       acp_read_only_reason = ReadOnlyGuard.reason(session),
       acp_last_read = vim.deepcopy(session.last_read),
       acp_prompt_queue = PromptQueue.list(session),
+      acp_pending_permission = backend.get_pending_permission(pane_id),
+      acp_ui_requests = require("lazyagent.acp.ui_queue").snapshot(session),
       acp_transcript_debug = {
         owned = session.transcript_path ~= nil and session.transcript_path ~= "",
         readable = session.transcript_path ~= nil and vim.fn.filereadable(session.transcript_path) == 1,

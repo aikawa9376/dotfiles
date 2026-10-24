@@ -156,9 +156,21 @@ function M.run()
     events = backend.get_runtime_snapshot(pane_id).acp_protocol_events,
     acp = state.opts.acp,
   }))
+  assert_equal(backend.set_thread_review_state(runtime.acp_thread_id, "done", { fingerprint = "fixture" }), nil,
+    "busy local turn cannot be marked review done")
   assert_equal(assert(store:get(runtime.acp_thread_id)).title, "Manual thread title",
     "provider session title does not overwrite a manual title")
   local pending = backend.get_pending_permission(pane_id)
+  local activity = backend.get_cockpit_activity(pane_id)
+  assert(activity.received_at ~= nil and #activity.tools > 0, "live activity exposes active tools and receipt time")
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_activity.signature, activity.signature,
+    "runtime snapshot shares compact activity projection")
+  assert_equal(activity.tools[1].rawOutput, nil, "compact activity omits raw tool output")
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_pending_permission.request_id, pending.request_id,
+    "runtime exposes the live request identity")
+  assert_equal(backend.respond_permission(pane_id, "allow-once", "project", pending.request_id .. ":old"), nil,
+    "stale permission picker cannot answer a newer request")
+  assert(backend.get_pending_permission(pane_id), "rejected stale picker leaves permission pending")
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
   local extension_runtime = backend.get_runtime_snapshot(pane_id)
   assert_equal(extension_runtime.acp_plan_artifact, nil, "plan_removed clears the current plan artifact")

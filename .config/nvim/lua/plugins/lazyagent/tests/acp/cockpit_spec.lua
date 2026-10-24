@@ -33,7 +33,7 @@ function M.run()
   local rendered = table.concat(lines, "\n")
   assert(rendered:find("## /tmp/project%-a"), "project A group")
   assert(rendered:find("## /tmp/project%-b"), "project B group")
-  assert(rendered:find("%[running%]%s+claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · ctx:resume · hist:local · First"), "thread card columns")
+  assert(rendered:find("%[running%]%s+claude · activity:Working · activity unavailable · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · ctx:resume · hist:local · First"), "thread card columns")
   assert(rendered:find("external = another Neovim", 1, true), "cockpit lifecycle legend")
   assert(rendered:find("`?` actions", 1, true), "cockpit action menu key hint")
   assert(rendered:find("`n` new agent", 1, true), "cockpit new agent key hint")
@@ -70,7 +70,7 @@ function M.run()
     },
     {
       thread_id = "active-idle", title = "Live idle", provider_id = "Codex", cwd = "/tmp/lifecycle",
-      status = "active", process_id = 42, metadata = { agentmux = { state = "idle" } },
+      status = "active", process_id = vim.fn.getpid(), metadata = { agentmux = { state = "idle" } },
     },
   }, {})
   local lifecycle_rendered = table.concat(lifecycle_lines, "\n")
@@ -81,7 +81,7 @@ function M.run()
   local external_lines = Cockpit.render({
     {
       thread_id = "external-live", title = "Other Neovim", provider_id = "Codex", cwd = "/tmp/lifecycle",
-      status = "active", process_id = 42, metadata = { editor = { owner_pid = vim.fn.getpid() } },
+      status = "active", process_id = vim.fn.getpid(), metadata = { editor = { owner_pid = vim.fn.getpid() } },
     },
   }, {}, { owner_pid = vim.fn.getpid() + 1 })
   local external_rendered = table.concat(external_lines, "\n")
@@ -145,7 +145,7 @@ function M.run()
   end
   local compact_lines = Cockpit.render(narrow_threads, {}, { width = 160 })
   local compact_rendered = table.concat(compact_lines, "\n")
-  assert(compact_rendered:find("%- %s*%[active%]") or compact_rendered:find("%- %s*%[archived%]"), "unpinned row has compact prefix")
+  assert(compact_rendered:find("%- %s*%[closed%]") or compact_rendered:find("%- %s*%[archived%]"), "unpinned row has compact prefix")
   assert(not compact_rendered:find("deliberately much too long for a single cockpit line", 1, true), "prompt has a compact maximum width")
   local filtered = Cockpit.filter(threads, "CLAUDE")
   assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
@@ -240,6 +240,70 @@ function M.run()
   })
   assert(conflicts.one["same.lua"] and conflicts.two["same.lua"], "shared root conflict")
   assert(conflicts.isolated == nil, "worktree conflict isolation")
+
+  local history = {}
+  for index = 1, 14 do
+    history[#history + 1] = {
+      thread_id = string.format("history-%02d", index), title = "History " .. index,
+      provider_id = "Codex", status = "closed", cwd = "/tmp/pages",
+      updated_at = string.format("2026-10-%02d", index),
+    }
+  end
+  history[#history + 1] = {
+    thread_id = "pinned-old", title = "Old pinned", provider_id = "Codex", status = "closed",
+    cwd = "/tmp/pages", updated_at = "2020-01-01", metadata = { cockpit_pinned = true },
+  }
+  history[#history + 1] = {
+    thread_id = "live-old", title = "Old live", provider_id = "Codex", status = "active",
+    cwd = "/tmp/pages", updated_at = "2020-01-01",
+  }
+  local pages, page_map, _, controls = Cockpit.render(history, { ["live-old"] = { acp_ready = true } })
+  local visible = {}
+  for _, id in pairs(page_map) do visible[id] = true end
+  assert(vim.tbl_count(visible) == 12 and visible["live-old"] and visible["pinned-old"],
+    "history cap keeps all live and pinned threads in addition to ten recent histories")
+  assert(visible["history-14"] and visible["history-05"] and not visible["history-04"], "newest history first")
+  local more_row = assert(next(controls))
+  assert(pages[more_row]:find("More history (4)", 1, true) and page_map[more_row] == nil,
+    "more control is separate from actionable thread rows")
+  local expanded, expanded_map, _, expanded_controls = Cockpit.render(history, {
+    ["live-old"] = { acp_ready = true },
+  }, { expanded_groups = { ["/tmp/pages"] = true } })
+  assert(vim.tbl_count(expanded_map) == #history and expanded[next(expanded_controls)]:find("Show less", 1, true),
+    "expanded group reveals all histories and a collapse control")
+  local _, five_map = Cockpit.render(history, { ["live-old"] = { acp_ready = true } }, { history_limit = 5 })
+  assert(vim.tbl_count(five_map) == 7, "configurable history cap")
+
+  local status_opts = {
+    owner_pid = 100, owner_instance_id = "here",
+    process_info = function(pid)
+      if pid == 1 then return { alive = true, identity = "1:new" } end
+      if pid == 2 then return { error = "EPERM" } end
+      return { alive = false }
+    end,
+  }
+  local dead_thread = {
+    status = "active", process_id = 999,
+    metadata = { editor = { instance_id = "other", owner_pid = 1 } },
+  }
+  assert(Cockpit.thread_status(dead_thread, nil, status_opts) == "closed", "dead agent is closed even if owner lives")
+  dead_thread.process_id = nil
+  assert(Cockpit.thread_status(dead_thread, nil, status_opts) == "closed", "missing agent PID is closed")
+  dead_thread.process_id = 1
+  assert(Cockpit.thread_status(dead_thread, nil, status_opts) == "external", "live foreign agent remains external")
+  dead_thread.metadata.editor.owner_pid = 999
+  assert(Cockpit.thread_status(dead_thread, nil, status_opts) == "disconnected", "orphan live agent stays disconnected")
+  dead_thread.metadata.process_identity = "1:old"
+  assert(Cockpit.thread_status(dead_thread, nil, status_opts) == "closed", "reused PID does not keep old thread active")
+  dead_thread.process_id = 2
+  assert(Cockpit.thread_status(dead_thread, nil, status_opts) == "disconnected", "unknown process state is not closed")
+  assert(Cockpit.thread_status(dead_thread, { acp_failed = true, acp_process_id = 999 }, status_opts) == "closed",
+    "failed runtime with exited process is closed")
+  assert(Cockpit.thread_status(dead_thread, { acp_failed = true, acp_process_id = 2 }, status_opts) == "disconnected",
+    "failed runtime with unknown process stays disconnected")
+  local Process = require("lazyagent.acp.process")
+  assert(Process.inspect(vim.fn.getpid()).alive == true, "current process probe")
+  assert(Process.inspect(2147483647).alive == false, "missing process probe")
 end
 
 return M

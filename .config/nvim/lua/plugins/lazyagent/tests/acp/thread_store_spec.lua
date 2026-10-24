@@ -120,6 +120,30 @@ function M.run()
   assert_equal(stale, nil, "stale process update result")
   assert_equal(stale_err.code, "stale_process", "stale process update error")
   assert_equal(assert(store:get(THREAD_ID)).status, "active", "stale process update isolation")
+  local missing_owner, missing_owner_err = store:update(THREAD_ID, { status = "closed" }, {
+    expected_process_id = vim.NIL,
+  })
+  assert_equal(missing_owner, nil, "missing-PID recovery cannot overwrite a newly claimed process")
+  assert_equal(missing_owner_err.code, "stale_process", "missing-PID ownership guard")
+  assert(store:update(THREAD_ID, { process_id = vim.NIL }))
+  local activity_time = assert(store:get(THREAD_ID)).updated_at
+  assert(store:update(THREAD_ID, { status = "closed" }, { expected_process_id = vim.NIL, preserve_updated_at = true }))
+  assert_equal(assert(store:get(THREAD_ID)).updated_at, activity_time, "automatic recovery preserves history recency")
+  assert_equal(assert(store:get(THREAD_ID)).status, "closed", "missing-PID recovery is atomic")
+  assert(store:update(THREAD_ID, { metadata = { test_result = { run_id = "new-test", status = "running" } } }))
+  local old_test, old_test_err = store:update(THREAD_ID, { metadata = { test_result = { status = "passed" } } }, {
+    expected_test_run_id = "old-test",
+  })
+  assert_equal(old_test, nil, "old test completion cannot replace a newer run")
+  assert_equal(old_test_err.code, "stale_test", "test run identity guard")
+  local Review = require("lazyagent.acp.cockpit_review")
+  local old_review_version = Review.version(assert(store:get(THREAD_ID)))
+  assert(store:update(THREAD_ID, { metadata = { cockpit_review = { state = "reviewing", revision = "new" } } }))
+  local stale_review, stale_review_err = store:update(THREAD_ID, { metadata = { cockpit_review = { state = "done" } } }, {
+    expected_cockpit_version = old_review_version,
+  })
+  assert_equal(stale_review, nil, "stale workflow confirmation is rejected under the manifest lock")
+  assert_equal(stale_review_err.code, "stale_cockpit", "workflow version guard")
 
   local deleted, deleted_record = store:delete(THREAD_ID)
   assert_equal(deleted, true, "delete result")

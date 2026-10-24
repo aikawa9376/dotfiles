@@ -48,6 +48,9 @@ function M.run()
   end
   payload = nil
   queue.enqueue(function(finish) other_started = true; finish() end, { owner = other })
+  assert_equal(#queue.snapshot(owner).pending, 1, "owner snapshot excludes other sessions")
+  assert_equal(queue.snapshot(other).active, nil, "another owner's active request is not exposed")
+  assert_equal(#queue.snapshot(other).pending, 1, "owner snapshot includes queued input")
   assert_equal(queue.cancel(owner), 2, "cancel removes only the owner's active and pending requests")
   assert_equal(cancelled, 2, "cancel settles each request once")
   assert_equal(is_current(), false, "cancel invalidates the old UI request")

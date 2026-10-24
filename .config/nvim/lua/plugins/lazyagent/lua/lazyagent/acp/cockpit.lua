@@ -1,5 +1,11 @@
 local M = {}
 local config_values = require("lazyagent.acp.config_values")
+local Activity = require("lazyagent.acp.cockpit_activity")
+local Query = require("lazyagent.acp.cockpit_query")
+local process = require("lazyagent.acp.process")
+local Attention = require("lazyagent.acp.cockpit_attention")
+local WorktreeTest = require("lazyagent.acp.worktree_test")
+local Review = require("lazyagent.acp.cockpit_review")
 
 local highlight_ns = vim.api.nvim_create_namespace("LazyAgentACPCockpit")
 local PROMPT_MAX_WIDTH = 48
@@ -243,26 +249,40 @@ local function group_path(thread)
   return metadata.worktree_path or thread.cwd or "(unknown workspace)"
 end
 
-local function process_alive(pid)
-  pid = tonumber(pid)
-  if not pid or pid <= 0 then return false end
-  local ok, result = pcall((vim.uv or vim.loop).kill, pid, 0)
-  return ok and result == 0
+local function process_info(pid, opts)
+  local cache = opts.process_cache
+  local key = tostring(pid)
+  if cache and cache[key] then return cache[key] end
+  local info = (opts.process_info or process.inspect)(pid)
+  if cache then cache[key] = info end
+  return info
 end
 
-local function common_status(thread, runtime, opts)
+function M.thread_status(thread, runtime, opts)
   opts = opts or {}
   if runtime then
-    if runtime.acp_failed == true then return "disconnected" end
+    if runtime.acp_failed == true then
+      local info = process_info(runtime.acp_process_id or thread.process_id, opts)
+      return info.alive == false and "closed" or "disconnected"
+    end
     if runtime.acp_client_debug and (tonumber(runtime.acp_client_debug.pending_permissions) or 0) > 0 then return "permission" end
+    local requests = runtime.acp_ui_requests or {}
+    if requests.active or #(requests.pending or {}) > 0 then return "waiting" end
     if runtime.agent_status == "waiting" then return "waiting" end
     if runtime.acp_busy == true or runtime.acp_preparing_prompt == true or runtime.agent_status == "thinking" then
       return "running"
     end
     if runtime.acp_ready == true then return "idle" end
   end
-  if thread.status == "active" and thread.process_id ~= nil then
+  if thread.status == "active" then
+    local info = process_info(thread.process_id, opts)
     local metadata = type(thread.metadata) == "table" and thread.metadata or {}
+    if info.alive == false
+      or (type(metadata.process_identity) == "string" and info.identity
+        and metadata.process_identity ~= info.identity)
+    then
+      return "closed"
+    end
     local persisted_instance = metadata.editor and metadata.editor.instance_id
     local persisted_owner = metadata.editor and metadata.editor.owner_pid
       or metadata.agentmux and metadata.agentmux.owner_pid
@@ -270,7 +290,7 @@ local function common_status(thread, runtime, opts)
       or not persisted_instance and opts.owner_pid and persisted_owner
         and tonumber(persisted_owner) ~= tonumber(opts.owner_pid)
     if foreign then
-      return process_alive(persisted_owner) and "external" or "disconnected"
+      return process_info(persisted_owner, opts).alive == true and "external" or "disconnected"
     end
     if opts.owner_pid and persisted_owner then
       return "disconnected"
@@ -282,6 +302,61 @@ local function common_status(thread, runtime, opts)
     return "disconnected"
   end
   return thread.status or "closed"
+end
+
+local common_status = M.thread_status
+
+function M.test_status(thread, opts)
+  opts = opts or {}
+  local result = thread.metadata and thread.metadata.test_result
+  if result and result.status ~= "running" and opts.fingerprint_pending and opts.fingerprint_pending[thread.cwd] then
+    return "checking"
+  end
+  local fingerprint = opts.fingerprints and opts.fingerprints[thread.cwd]
+  return WorktreeTest.status(result, fingerprint)
+end
+
+function M.attention(thread, runtime, opts)
+  opts = vim.tbl_extend("force", {}, opts or {})
+  opts.status = common_status(thread, runtime, opts)
+  opts.test_status = M.test_status(thread, opts)
+  opts.review = M.review(thread, runtime, opts)
+  opts.since = M.since(thread, opts)
+  return Attention.summarize(thread, runtime, opts)
+end
+
+function M.review(thread, runtime, opts)
+  opts = opts or {}
+  if not Review.enabled(thread) then return { enabled = false, state = "off" } end
+  local cache = opts.review_cache
+  if cache and cache[thread.thread_id] then return cache[thread.thread_id] end
+  local unowned_active = runtime == nil and thread.status == "active"
+  runtime = runtime or {}
+  local result = Review.summary(thread, {
+    fingerprint = opts.fingerprints and opts.fingerprints[thread.cwd],
+    fingerprint_pending = opts.fingerprint_pending and opts.fingerprint_pending[thread.cwd],
+    busy = runtime.acp_busy or runtime.acp_preparing_prompt or unowned_active,
+  })
+  if cache then cache[thread.thread_id] = result end
+  return result
+end
+
+function M.since(thread, opts)
+  local cache = opts and opts.since_cache
+  if cache and cache[thread.thread_id] then return cache[thread.thread_id] end
+  local result = Review.since(thread)
+  if cache then cache[thread.thread_id] = result end
+  return result
+end
+
+function M.needs_attention(thread, runtime, opts)
+  local attention = M.attention(thread, runtime, opts)
+  return #attention.items > 0 and not attention.snoozed
+end
+
+local function live_thread(thread, runtime, opts)
+  local status = common_status(thread, runtime, opts)
+  return runtime ~= nil or (thread.status == "active" and status ~= "closed")
 end
 
 local transcript_roles = {
@@ -369,8 +444,20 @@ local function card_line(thread, runtime, conflicts, opts)
   local show_title = raw_title ~= ""
   local is_open = opts.open_thread_id == thread.thread_id
   local activation = M.activation_summary(thread, runtime)
+  local attention = M.attention(thread, runtime, opts)
+  local alerted = #attention.items > 0 and not attention.snoozed
 
   local fields = {}
+  local activity = Activity.summarize(runtime)
+  if activity.available and activity.label ~= "Idle" then
+    fields[#fields + 1] = { "activity:" .. truncate_display(activity.label, 36), "LazyAgentACPCockpitMuted", "activity" }
+  end
+  if Review.enabled(thread) then
+    fields[#fields + 1] = { "review:" .. M.review(thread, runtime, opts).state, "LazyAgentACPCockpitMuted", "review" }
+  end
+  if alerted then
+    fields[#fields + 1] = { truncate_display(attention.items[1].label, 36), "LazyAgentACPCockpitUnread", "attention" }
+  end
   local team = runtime and runtime.lazyagent_team
     or (thread.metadata and thread.metadata.lazyagent_team)
     or nil
@@ -396,7 +483,7 @@ local function card_line(thread, runtime, conflicts, opts)
     fields[#fields + 1] = { "⚠conflicts:" .. tostring(conflict_count), "LazyAgentACPCockpitConflict", "conflict" }
   end
   if test then
-    local test_status = tostring(test.status)
+    local test_status = M.test_status(thread, opts)
     local test_group = test_status == "passed" and "LazyAgentACPCockpitTestPassed"
       or test_status == "failed" and "LazyAgentACPCockpitTestFailed"
       or "LazyAgentACPCockpitTestRunning"
@@ -411,14 +498,14 @@ local function card_line(thread, runtime, conflicts, opts)
 
   local function fixed_width()
     local status_padding = math.max(1, (opts.status_width or display_width(status)) - display_width(status) + 1)
-    local width = display_width("- " .. (is_open and "● " or "") .. (pinned and "★ " or "") .. "[" .. status .. "]")
+    local width = display_width("- " .. (alerted and "! " or "") .. (is_open and "● " or "") .. (pinned and "★ " or "") .. "[" .. status .. "]")
       + status_padding + display_width(provider)
     for _, field in ipairs(fields) do width = width + display_width(" · " .. field[1]) end
     if show_title then width = width + display_width(" · ") end
     return width
   end
 
-  local removal_order = { "activation", "usage", "model", "changes", "test", "unread", "conflict", "queue", "team" }
+  local removal_order = { "activation", "usage", "model", "changes", "test", "unread", "conflict", "queue", "team", "review", "activity", "attention" }
   local minimum_tail_width = show_title and 12 or 0
   while max_width and max_width - fixed_width() < minimum_tail_width do
     local removed = false
@@ -446,6 +533,7 @@ local function card_line(thread, runtime, conflicts, opts)
   local title = show_title and title_width > 0 and truncate_display(raw_title, title_width) or ""
   local parts, spans = {}, {}
   add_segment(parts, spans, "- ", "LazyAgentACPCockpitMuted")
+  if alerted then add_segment(parts, spans, "! ", "LazyAgentACPCockpitUnread") end
   if is_open then add_segment(parts, spans, "● ", "LazyAgentACPCockpitActive") end
   if pinned then add_segment(parts, spans, "★ ", "LazyAgentACPCockpitPin") end
   add_segment(parts, spans, "[" .. status .. "]", status_highlights[status] or "LazyAgentACPCockpitMuted")
@@ -465,6 +553,8 @@ end
 function M.render(threads, runtimes, opts)
   runtimes = runtimes or {}
   opts = vim.tbl_extend("force", {}, opts or {})
+  opts.process_cache = opts.process_cache or {}
+  opts.review_cache, opts.since_cache = {}, {}
   opts.status_width = 0
   for _, thread in ipairs(threads or {}) do
     opts.status_width = math.max(
@@ -474,10 +564,14 @@ function M.render(threads, runtimes, opts)
   end
   local conflicts = M.conflicts(threads)
   local groups = {}
+  local attention_count = 0
   for _, thread in ipairs(threads or {}) do
-    local path = group_path(thread)
-    groups[path] = groups[path] or {}
-    groups[path][#groups[path] + 1] = thread
+    if M.needs_attention(thread, runtimes[thread.thread_id], opts) then attention_count = attention_count + 1 end
+    if not opts.attention_only or M.needs_attention(thread, runtimes[thread.thread_id], opts) then
+      local path = group_path(thread)
+      groups[path] = groups[path] or {}
+      groups[path][#groups[path] + 1] = thread
+    end
   end
   local paths = vim.tbl_keys(groups)
   local current_root = tostring(opts.current_root or ""):gsub("/$", "")
@@ -489,30 +583,50 @@ function M.render(threads, runtimes, opts)
   end)
 
   local lines = {
-    "# LazyAgent ACP Session Cockpit",
+    "# LazyAgent ACP Session Cockpit · attention:" .. attention_count .. (opts.attention_only and " · Attention view" or ""),
     "",
     "persisted threads: running/idle = this Neovim, external = another Neovim, closed = resumable history, archived = retained history",
     "`?` actions  `n` new agent  `<C-y>` copy ref  `<CR>` latest/mirror  `P` preview  `s` preview layout  `q` close",
   }
+  if opts.query and opts.query ~= "" or opts.view_name then
+    lines[2] = (opts.view_name and ("View: " .. opts.view_name .. " · ") or "") .. "Filter: " .. (opts.query or "")
+    lines[2] = vim.fn.strcharpart(lines[2]:gsub("%c", " "), 0, 240)
+  end
   local line_map = {}
+  local controls = {}
+  local group_rows = {}
   local highlights = {
     [1] = { { start_col = 0, end_col = #lines[1], group = "LazyAgentACPCockpitTitle" } },
     [3] = { { start_col = 0, end_col = #lines[3], group = "LazyAgentACPCockpitHelp" } },
     [4] = { { start_col = 0, end_col = #lines[4], group = "LazyAgentACPCockpitHelp" } },
   }
+  if lines[2] ~= "" then highlights[2] = { { start_col = 0, end_col = #lines[2], group = "LazyAgentACPCockpitHelp" } } end
   if #paths == 0 then
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "_No persisted ACP threads._"
-    return lines, line_map, highlights
+    lines[#lines + 1] = opts.attention_only and "_No threads need attention._" or "_No persisted ACP threads._"
+    return lines, line_map, highlights, controls, group_rows
   end
 
   for _, path in ipairs(paths) do
+    local group_attention = 0
+    for _, thread in ipairs(groups[path]) do
+      if M.needs_attention(thread, runtimes[thread.thread_id], opts) then group_attention = group_attention + 1 end
+    end
+    local collapsed = opts.collapsed_groups and opts.collapsed_groups[path]
     lines[#lines + 1] = ""
     lines[#lines + 1] = "## " .. vim.fn.fnamemodify(path, ":~")
+      .. (group_attention > 0 and (" · attention:" .. group_attention) or "")
+      .. (collapsed and " · collapsed" or "")
+    group_rows[#lines] = path
     highlights[#lines] = { { start_col = 0, end_col = #lines[#lines], group = "LazyAgentACPCockpitWorkspace" } }
     table.sort(groups[path], function(left, right)
-      local left_live = runtimes[left.thread_id] ~= nil or (left.status == "active" and left.process_id ~= nil)
-      local right_live = runtimes[right.thread_id] ~= nil or (right.status == "active" and right.process_id ~= nil)
+      if opts.attention_only then
+        local left_priority = M.attention(left, runtimes[left.thread_id], opts).priority
+        local right_priority = M.attention(right, runtimes[right.thread_id], opts).priority
+        if left_priority ~= right_priority then return left_priority < right_priority end
+      end
+      local left_live = live_thread(left, runtimes[left.thread_id], opts)
+      local right_live = live_thread(right, runtimes[right.thread_id], opts)
       if left_live ~= right_live then return left_live end
       local left_pinned = left.metadata and left.metadata.cockpit_pinned == true
       local right_pinned = right.metadata and right.metadata.cockpit_pinned == true
@@ -520,15 +634,31 @@ function M.render(threads, runtimes, opts)
       if left.updated_at == right.updated_at then return left.thread_id < right.thread_id end
       return tostring(left.updated_at or "") > tostring(right.updated_at or "")
     end)
-    for _, thread in ipairs(groups[path]) do
+    local limit = math.max(1, math.floor(tonumber(opts.history_limit) or 10))
+    local expanded = opts.expanded_groups and opts.expanded_groups[path] == true
+    local history_count, hidden_count = 0, 0
+    for _, thread in ipairs(collapsed and {} or groups[path]) do
       local runtime = runtimes[thread.thread_id]
-      local line, spans = card_line(thread, runtime, conflicts, opts)
-      lines[#lines + 1] = line
-      line_map[#lines] = thread.thread_id
-      highlights[#lines] = spans
+      local pinned = thread.metadata and thread.metadata.cockpit_pinned == true
+      local history = not live_thread(thread, runtime, opts) and not pinned and not M.needs_attention(thread, runtime, opts)
+      if history then history_count = history_count + 1 end
+      if history and history_count > limit and not expanded then
+        hidden_count = hidden_count + 1
+      else
+        local line, spans = card_line(thread, runtime, conflicts, opts)
+        lines[#lines + 1] = line
+        line_map[#lines] = thread.thread_id
+        highlights[#lines] = spans
+      end
+    end
+    if hidden_count > 0 or (expanded and history_count > limit) then
+      lines[#lines + 1] = expanded and "  ▴ Show less history  <CR>"
+        or string.format("  ▸ More history (%d)  <CR>", hidden_count)
+      controls[#lines] = { path = path, expanded = expanded }
+      highlights[#lines] = { { start_col = 0, end_col = #lines[#lines], group = "LazyAgentACPCockpitHelp" } }
     end
   end
-  return lines, line_map, highlights
+  return lines, line_map, highlights, controls, group_rows
 end
 
 function M.apply_highlights(bufnr, highlights)
@@ -546,32 +676,53 @@ function M.apply_highlights(bufnr, highlights)
 end
 
 function M.filter(threads, query, runtimes, opts)
-  query = vim.trim(tostring(query or "")):lower()
+  query = vim.trim(tostring(query or ""))
   runtimes = runtimes or {}
   opts = opts or {}
   local meaningful = vim.tbl_filter(M.has_meaningful_content, threads or {})
   if query == "" then return meaningful end
+  local compiled, err = Query.compile(query)
+  if not compiled then return {}, err end
+  local needed = {}
+  for _, term in ipairs(compiled.terms) do needed[term.field] = true end
   return vim.tbl_filter(function(thread)
     local runtime = runtimes[thread.thread_id]
-    local text = table.concat({
-      thread.thread_id or "",
-      thread.title or "",
-      M.prompt_title(thread) or "",
-      thread.provider_id or "",
-      thread.cwd or "",
-      group_path(thread),
-      thread.status or "",
-      common_status(thread, runtime, opts),
-      tostring(configured_model(thread, runtime)),
-      thread.metadata and thread.metadata.lazyagent_team
-          and vim.inspect(thread.metadata.lazyagent_team)
-        or "",
-      runtime and runtime.lazyagent_team and vim.inspect(runtime.lazyagent_team) or "",
-      thread.unread == true and "unread" or "read",
-      (M.activation_summary(thread, runtime).context_label or ""),
-      (M.activation_summary(thread, runtime).history_label or ""),
-    }, " "):lower()
-    return text:find(query, 1, true) ~= nil
+    local text = ""
+    if needed.text then
+      text = table.concat({
+        thread.thread_id or "",
+        thread.title or "",
+        M.prompt_title(thread) or "",
+        thread.provider_id or "",
+        thread.cwd or "",
+        group_path(thread),
+        thread.status or "",
+        common_status(thread, runtime, opts),
+        tostring(configured_model(thread, runtime)),
+        thread.metadata and thread.metadata.lazyagent_team
+            and vim.inspect(thread.metadata.lazyagent_team)
+          or "",
+        runtime and runtime.lazyagent_team and vim.inspect(runtime.lazyagent_team) or "",
+        thread.unread == true and "unread" or "read",
+        (M.activation_summary(thread, runtime).context_label or ""),
+        (M.activation_summary(thread, runtime).history_label or ""),
+        "review:" .. M.review(thread, runtime, opts).state,
+        M.since(thread, opts).changed and "updates" or "",
+        Activity.summarize(runtime).label,
+      }, " "):lower()
+    end
+    local workspace = group_path(thread)
+    local function root(path) return vim.fs.normalize(tostring(path)):gsub("(.)/+$", "%1") end
+    return Query.matches(compiled, {
+      text = text, status = common_status(thread, runtime, opts), provider = thread.provider_id,
+      model = configured_model(thread, runtime), workspace = workspace,
+      current_workspace = opts.current_root ~= nil and opts.current_root ~= "" and root(workspace) == root(opts.current_root),
+      team = vim.inspect(runtime and runtime.lazyagent_team or (thread.metadata or {}).lazyagent_team or {}),
+      review = needed.review and M.review(thread, runtime, opts).state, test = needed.test and M.test_status(thread, opts),
+      activity = needed.activity and Activity.summarize(runtime).label, unread = thread.unread == true,
+      pinned = (thread.metadata or {}).cockpit_pinned == true, attention = needed.attention and M.needs_attention(thread, runtime, opts),
+      updates = needed.updates and M.since(thread, opts).changed == true, live = live_thread(thread, runtime, opts), tracked = Review.enabled(thread),
+    })
   end, meaningful)
 end
 

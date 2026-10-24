@@ -507,7 +507,9 @@ function M.setup(deps)
         scope = choice.scope,
       }
     end
+    session.permission_request_seq = (session.permission_request_seq or 0) + 1
     session.pending_permission = {
+      request_id = tostring((vim.uv or vim.loop).hrtime()) .. ":" .. session.permission_request_seq,
       tool_call_id = tool.toolCallId,
       title = permission_title,
       kind = tool.kind,
@@ -670,6 +672,7 @@ function M.setup(deps)
     local message_stream = MessageStream.identity(update)
     local source_session_id = params.sessionId
     local source_subagent = source_session_id and session.subagents and session.subagents[source_session_id] or nil
+    require("lazyagent.acp.cockpit_activity").record(session, kind, source_subagent == nil)
     local source_label = source_subagent and ("Subagent " .. tostring(source_subagent.name or source_session_id)) or nil
 
     if kind == "agent_message_chunk" then
@@ -1831,6 +1834,7 @@ function M.setup(deps)
       session.mcp_server_count = #client:_build_mcp_servers()
       sync_runtime_session(session)
       local activation_metadata = vim.deepcopy(session.thread_record and session.thread_record.metadata or {})
+      activation_metadata.process_identity = require("lazyagent.acp.process").inspect(client.pid).identity or vim.NIL
       activation_metadata.activation = vim.tbl_deep_extend("force", activation_metadata.activation or {}, {
         attempts = vim.deepcopy(session.activation_trace),
         context_continuity = session.activation_context_continuity,

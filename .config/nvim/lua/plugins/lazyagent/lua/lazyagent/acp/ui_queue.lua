@@ -4,6 +4,12 @@ local pending = {}
 local active = nil
 local sequence = 0
 
+local function changed()
+  vim.schedule(function()
+    pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "LazyAgentACPAttentionChanged" })
+  end)
+end
+
 local function release_entry(entry)
   entry.run, entry.on_error, entry.on_cancel, entry.owner = nil, nil, nil, nil
 end
@@ -18,6 +24,7 @@ local function drain()
     finished = true
     if active == entry then active = nil end
     release_entry(entry)
+    changed()
     vim.schedule(drain)
     return true
   end
@@ -45,6 +52,7 @@ function M.enqueue(run, opts)
   }
   pending[#pending + 1] = entry
   drain()
+  changed()
   return entry.id
 end
 
@@ -64,12 +72,17 @@ function M.cancel(owner)
     if entry.finish then entry.finish() else release_entry(entry) end
     if on_cancel then pcall(on_cancel) end
   end
+  if #removed > 0 then changed() end
   return #removed
 end
 
-function M.snapshot()
+function M.snapshot(owner)
+  local selected = {}
+  for _, entry in ipairs(pending) do
+    if owner == nil or entry.owner == owner then selected[#selected + 1] = entry end
+  end
   return {
-    active = active and {
+    active = active and (owner == nil or active.owner == owner) and {
       id = active.id,
       kind = active.kind,
       label = active.label,
@@ -80,7 +93,7 @@ function M.snapshot()
         kind = entry.kind,
         label = entry.label,
       }
-    end, pending),
+    end, selected),
   }
 end
 

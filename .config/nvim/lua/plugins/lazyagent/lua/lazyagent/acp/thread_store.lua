@@ -456,12 +456,23 @@ function Store:update(thread_id, changes, opts)
     if not index then
       return nil, "thread not found: " .. thread_id
     end
-    if opts.expected_process_id ~= nil and current.process_id ~= opts.expected_process_id then
+    local expected_pid = opts.expected_process_id ~= vim.NIL and opts.expected_process_id or nil
+    if opts.expected_process_id ~= nil and current.process_id ~= expected_pid then
       return nil, {
         code = "stale_process",
         expected_process_id = opts.expected_process_id,
         current_process_id = current.process_id,
       }
+    end
+    if opts.expected_test_run_id ~= nil
+      and (not current.metadata.test_result or current.metadata.test_result.run_id ~= opts.expected_test_run_id)
+    then
+      return nil, { code = "stale_test" }
+    end
+    if opts.expected_cockpit_version ~= nil
+      and require("lazyagent.acp.cockpit_review").version(current) ~= opts.expected_cockpit_version
+    then
+      return nil, { code = "stale_cockpit", message = "Thread changed; refresh before confirming" }
     end
     if opts.skip_unchanged == true then
       local unchanged = true
@@ -476,10 +487,13 @@ function Store:update(thread_id, changes, opts)
     changes.thread_id = current.thread_id
     changes.provider_id = current.provider_id
     changes.created_at = current.created_at
-    changes.updated_at = self:_timestamp()
+    changes.updated_at = opts.preserve_updated_at == true and current.updated_at or self:_timestamp()
     local merged = vim.tbl_deep_extend("force", copy(current), changes)
     if opts.replace_metadata == true then
       merged.metadata = copy(changes.metadata or {})
+    end
+    for _, field in ipairs(opts.replace_metadata_fields or {}) do
+      merged.metadata[field] = changes.metadata and copy(changes.metadata[field]) or nil
     end
     for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do
       if changes[field] == vim.NIL then
