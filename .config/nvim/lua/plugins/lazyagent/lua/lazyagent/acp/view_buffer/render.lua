@@ -45,6 +45,17 @@ function M.new(ctx)
     return (line:gsub("[%s─]+$", ""))
   end
 
+  local function truncate_header(line, width)
+    if strdisplaywidth(line) <= width then return line end
+    local text = ""
+    for index = 0, vim.fn.strchars(line) - 1 do
+      local char = vim.fn.strcharpart(line, index, 1)
+      if strdisplaywidth(text .. char .. "…") > width then break end
+      text = text .. char
+    end
+    return text .. "…"
+  end
+
   local function fancy_header_line(line)
     local heading = section_heading_for_line(line)
     local replacement = heading and FANCY_SECTION_LABELS[heading] or nil
@@ -268,15 +279,18 @@ function M.new(ctx)
     local changed = false
     local normalized = nil
     for idx, line in ipairs(lines) do
-      local rebuilt = resolve_assistant_icon(line, provider, assistant_icon_mode)
+      local rebuilt = ctx.preserve_assistant_icon and line or resolve_assistant_icon(line, provider, assistant_icon_mode)
       if fancy and (rebuilt:match("^─ ") or rebuilt:match("^╭─ ")) then
         rebuilt = fancy_header_line(rebuilt)
       end
       if width and width > 0 and rebuilt:match("^─ ") and line_has_tail(rebuilt) then
         local prefix = tail_prefix(rebuilt)
         local prefix_width = strdisplaywidth(prefix)
-        local tail_len = math.max(8, width - prefix_width - 1)
-        rebuilt = prefix .. " " .. string.rep("─", tail_len)
+        local tail_len = math.max(ctx.truncate_headers and 0 or 8, width - prefix_width - 1)
+        rebuilt = tail_len > 0 and (prefix .. " " .. string.rep("─", tail_len)) or prefix
+      end
+      if ctx.truncate_headers and width and width > 0 and section_heading_for_line(rebuilt) then
+        rebuilt = truncate_header(rebuilt, width)
       end
       if rebuilt ~= line then
         normalized = normalized or shallow_list_copy(lines)

@@ -898,6 +898,7 @@ function M.setup(deps)
     local thread_agents = {}
     local runtimes = {}
     local preview_bufnr
+    local preview_renderer
     local preview_winid
     local preview_enabled = true
     local preview_mode = "summary"
@@ -940,7 +941,8 @@ function M.setup(deps)
         vim.bo[preview_bufnr].buftype = "nofile"
         vim.bo[preview_bufnr].bufhidden = "wipe"
         vim.bo[preview_bufnr].swapfile = false
-        vim.bo[preview_bufnr].filetype = "markdown"
+        vim.bo[preview_bufnr].filetype = "lazyagent_acp"
+        preview_renderer = require("lazyagent.acp.transcript_preview").attach(preview_bufnr)
         for _, key in ipairs({ "K", "<Tab>", "C", "gC", "g/", "Q", "A", "t", "m", "Z", "V", "u", "w", "S", "F", "gF" }) do
           vim.keymap.set("n", key, function()
             if not vim.api.nvim_buf_is_valid(bufnr) then return end
@@ -970,6 +972,14 @@ function M.setup(deps)
       vim.wo[preview_winid].winfixheight = preview_layout == "horizontal"
       vim.wo[preview_winid].winfixwidth = preview_layout == "split"
       vim.wo[preview_winid].wrap = true
+      vim.wo[preview_winid].linebreak = true
+      vim.wo[preview_winid].breakindent = true
+      vim.wo[preview_winid].conceallevel = 2
+      vim.wo[preview_winid].concealcursor = "nvic"
+      vim.wo[preview_winid].signcolumn = "no"
+      vim.wo[preview_winid].statuscolumn = ""
+      vim.wo[preview_winid].foldcolumn = "0"
+      vim.wo[preview_winid].foldenable = false
       vim.wo[preview_winid].number = false
       vim.wo[preview_winid].relativenumber = false
       vim.wo[preview_winid].winhighlight = "Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat"
@@ -1177,7 +1187,7 @@ function M.setup(deps)
           if #lines == 0 then lines = { "_The transcript is currently empty._" } end
           if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
             vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· Mirror · "
-              .. tostring(thread.provider_id or "Agent") .. " · " .. title .. " "
+              .. tostring(thread.provider_id or "Agent"):gsub("%%", "%%%%") .. " · " .. title:gsub("%%", "%%%%") .. " "
           end
         elseif preview_mode == "details" then
           preview_thread_id, preview_signature = thread.thread_id, nil
@@ -1206,7 +1216,7 @@ function M.setup(deps)
       local follow = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
         and vim.api.nvim_win_get_cursor(preview_winid)[1] >= previous_count
       vim.bo[preview_bufnr].modifiable = true
-      vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, lines)
+      preview_renderer.set(lines, { transcript = thread ~= nil and preview_mode == "mirror", provider = thread and thread.provider_id })
       vim.bo[preview_bufnr].modifiable = false
       vim.bo[preview_bufnr].modified = false
       if follow and preview_winid and vim.api.nvim_win_is_valid(preview_winid) then

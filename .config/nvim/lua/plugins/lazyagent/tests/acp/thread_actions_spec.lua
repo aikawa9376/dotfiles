@@ -502,7 +502,7 @@ function M.run()
   local cockpit_preview_bufnr
   for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local preview_buf = vim.api.nvim_win_get_buf(winid)
-    if vim.bo[preview_buf].filetype == "markdown" and vim.api.nvim_buf_get_name(preview_buf):find("Cockpit Preview", 1, true) then
+    if vim.bo[preview_buf].filetype == "lazyagent_acp" and vim.api.nvim_buf_get_name(preview_buf):find("Cockpit Preview", 1, true) then
       preview_found = true
       cockpit_preview_bufnr = preview_buf
       assert_equal(
@@ -521,6 +521,7 @@ function M.run()
   )
   vim.cmd("normal \r")
   local latest_lines = vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false)
+  assert_equal(vim.bo[cockpit_preview_bufnr].filetype, "lazyagent_acp", "latest response retains the ACP Markdown adapter")
   assert(table.concat(latest_lines, "\n"):find("ready", 1, true), "cockpit enter toggles back to latest response")
 
   local Cockpit = require("lazyagent.acp.cockpit")
