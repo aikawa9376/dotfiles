@@ -53,6 +53,7 @@ local suites = {
   "tests.acp.thread_export_spec",
   "tests.acp.notifications_spec",
   "tests.acp.cockpit_spec",
+  "tests.acp.cockpit_search_spec",
   "tests.acp.cockpit_diff_spec",
   "tests.acp.cockpit_query_spec",
   "tests.acp.cockpit_views_spec",

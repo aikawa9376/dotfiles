@@ -889,6 +889,8 @@ function M.setup(deps)
     local pending_refresh = false
     local stored_threads = {}
     local query = ""
+    local body_search
+    local body_query = ""
     local view_name
     local view_store = require("lazyagent.acp.cockpit_views").new({ dir =
       (((state.opts or {}).cache or {}).dir or (vim.fn.stdpath("cache") .. "/lazyagent")) .. "/acp/cockpit-views" })
@@ -939,7 +941,7 @@ function M.setup(deps)
         vim.bo[preview_bufnr].bufhidden = "wipe"
         vim.bo[preview_bufnr].swapfile = false
         vim.bo[preview_bufnr].filetype = "markdown"
-        for _, key in ipairs({ "K", "<Tab>", "C", "gC", "Q", "A", "t", "m", "Z", "V", "u", "w", "S", "F", "gF" }) do
+        for _, key in ipairs({ "K", "<Tab>", "C", "gC", "g/", "Q", "A", "t", "m", "Z", "V", "u", "w", "S", "F", "gF" }) do
           vim.keymap.set("n", key, function()
             if not vim.api.nvim_buf_is_valid(bufnr) then return end
             local mapping = vim.api.nvim_buf_call(bufnr, function() return vim.fn.maparg(key, "n", false, true) end)
@@ -1765,6 +1767,29 @@ function M.setup(deps)
         else save() end
       end)
     end, { buffer = bufnr, desc = "Save current Cockpit filter and attention view" })
+    vim.keymap.set("n", "g/", function()
+      vim.ui.input({ prompt = "Search transcript text: ", default = body_query }, function(value)
+        if not value or vim.trim(value) == "" or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        body_query = value
+        local cockpit = require("lazyagent.acp.cockpit")
+        local search_opts = { current_root = current_root, owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id,
+          snoozed = snoozed, fingerprints = fingerprints, fingerprint_pending = fingerprint_pending }
+        local candidates = cockpit.filter(stored_threads, query, runtimes, search_opts)
+        if attention_only then candidates = vim.tbl_filter(function(thread)
+          return cockpit.needs_attention(thread, runtimes[thread.thread_id], search_opts)
+        end, candidates) end
+        table.sort(candidates, function(a, b)
+          if a.updated_at == b.updated_at then return a.thread_id < b.thread_id end
+          return tostring(a.updated_at or "") > tostring(b.updated_at or "")
+        end)
+        if not vim.api.nvim_win_is_valid(cockpit_winid)
+          or vim.api.nvim_win_get_tabpage(cockpit_winid) ~= vim.api.nvim_get_current_tabpage() then return end
+        vim.api.nvim_set_current_win(cockpit_winid)
+        if body_search then body_search.close() end
+        body_search = require("lazyagent.acp.cockpit_search").open(candidates, value, { owner_buf = bufnr,
+          scope = (query ~= "" and query or "All threads") .. (attention_only and " · attention only" or "") })
+      end)
+    end, { buffer = bufnr, desc = "Search transcript bodies across filtered threads" })
     vim.keymap.set("n", "F", function()
       local saved, err = view_store:list()
       if err then vim.notify(err, vim.log.levels.WARN) end
@@ -1893,6 +1918,7 @@ function M.setup(deps)
         { key = "s", description = "Toggle side / horizontal preview layout" },
         { key = "x", description = "Stop selected process" },
         { key = "/", description = "Filter threads (e.g. status:running unread:true)" },
+        { key = "g/", description = "Search transcript text across matching threads" },
         { key = "S", description = "Save filter and attention view" },
         { key = "F", description = "Choose saved or built-in view" },
         { key = "gF", description = "Delete saved view" },

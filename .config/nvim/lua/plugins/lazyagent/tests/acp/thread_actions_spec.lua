@@ -580,6 +580,22 @@ function M.run()
   vim.cmd("normal \r")
   assert(table.concat(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false), "\n"):find("More history (2)", 1, true),
     "expanded history can be collapsed again")
+  local BodySearch = require("lazyagent.acp.cockpit_search")
+  local original_search_open, original_search_input = BodySearch.open, vim.ui.input
+  local search_request
+  BodySearch.open = function(candidates, text, opts)
+    search_request = { candidates = candidates, text = text, owner = opts.owner_buf }
+    return { close = function() end }
+  end
+  vim.ui.input = function(_, callback) callback("Search hidden history") end
+  vim.cmd("normal g/")
+  local paged_sources = 0
+  for _, candidate in ipairs(search_request.candidates) do
+    if candidate.thread_id:find("history-page-", 1, true) then paged_sources = paged_sources + 1 end
+  end
+  assert_equal(paged_sources, 12, "body search includes histories hidden by pagination")
+  assert_equal(search_request.owner, cockpit_bufnr, "body search belongs to its Cockpit lifetime")
+  BodySearch.open, vim.ui.input = original_search_open, original_search_input
   for index = 1, 12 do records["history-page-" .. index] = nil end
   vim.cmd("normal r")
 
@@ -733,6 +749,15 @@ function M.run()
   assert(not filtered_cockpit:find("Live thread", 1, true), "cockpit filter removes the previous selection")
   local filtered_preview = table.concat(vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false), "\n")
   assert(filtered_preview:find("archived answer", 1, true), "filtered cockpit previews its visible thread")
+  BodySearch.open = function(candidates, text)
+    search_request = { candidates = candidates, text = text }
+    return { close = function() end }
+  end
+  vim.ui.input = function(_, callback) callback("archived answer") end
+  vim.cmd("normal g/")
+  assert_equal(#search_request.candidates, 1, "body search respects current metadata filter")
+  assert_equal(search_request.text, "archived answer", "body search uses separate literal text")
+  BodySearch.open = original_search_open
   vim.ui.input = function(_, callback) callback("unread:maybe") end
   vim.cmd("normal /")
   assert_equal(table.concat(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false), "\n"), filtered_cockpit,
