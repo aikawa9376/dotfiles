@@ -64,13 +64,16 @@ return {
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
 
       local bufname = vim.api.nvim_buf_get_name(bufnr)
-      if bufname == "" or bufname:match("^%a+://") then
-        git_cache[bufnr] = { is_git = false }
-        return
-      end
+      local dir = normalize_path(vim.b[bufnr].git_work_tree)
+      if not dir then
+        if bufname == "" or bufname:match("^%a[%w+.-]*://") then
+          git_cache[bufnr] = { is_git = false }
+          return
+        end
 
-      local dir = vim.fn.fnamemodify(bufname, ":h")
-      if vim.fn.isdirectory(dir) == 0 then dir = vim.fn.getcwd() end
+        dir = vim.fn.isdirectory(bufname) == 1 and bufname or vim.fn.fnamemodify(bufname, ":h")
+        if vim.fn.isdirectory(dir) == 0 then dir = vim.fn.getcwd() end
+      end
 
       -- 非同期で git 情報を取得してブロッキング（ちらつき）を回避
       local cmd = string.format("git -C %s rev-parse --is-inside-work-tree --show-toplevel --git-common-dir --abbrev-ref HEAD 2>/dev/null", vim.fn.shellescape(dir))
