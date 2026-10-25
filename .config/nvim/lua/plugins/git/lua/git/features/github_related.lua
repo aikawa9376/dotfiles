@@ -2,6 +2,8 @@
 local M = {}
 local github = require('git.features.github')
 local async = require('git.features.async')
+local cache = require('git.features.github_related_cache')
+local utils = require('git.utils')
 local function clean(value) return tostring(github.scalar(value) or ''):gsub('[%c]', ' ') end
 M.clean = clean
 
@@ -16,7 +18,7 @@ local function remote_repo(root, remote)
   if repo then return host, repo:gsub('/$', ''):gsub('%.git$', '') end
 end
 
-function M.load(opts)
+function M.load(opts, resolved)
   local explicit = opts.url or opts.number
   local branch, kind = opts.branch, opts.branch_kind
   -- Capture the ordinary-file fallback before the first network request.
@@ -24,7 +26,7 @@ function M.load(opts)
     local value = async.git(opts.root, { 'branch', '--show-current' })
     branch = value and vim.trim(value)
   end
-  local ctx = github.resolve(vim.tbl_extend('force', opts, { repository_only = not explicit }))
+  local ctx = resolved or github.resolve(vim.tbl_extend('force', opts, { repository_only = not explicit }))
   local result, seen = { items = {} }, {}
   local function add(pr)
     local identity = github.url_context(github.scalar(pr.html_url) or pr.url)
@@ -82,6 +84,87 @@ function M.load(opts)
   end)
   return result
 end
+
+local function prepare(opts)
+  local explicit = opts.url or opts.number
+  if not explicit and not opts.commit then
+    if opts.no_target and not opts.branch then return false end
+    if not opts.branch then
+      local branch = async.git(opts.root, { 'branch', '--show-current' })
+      opts.branch = branch and vim.trim(branch)
+    end
+    if not opts.branch or opts.branch == '' then return false end
+  end
+  local parsed = opts.url and github.url_context(opts.url)
+  if parsed then opts.url = parsed.url end
+  if not explicit and (opts.commit or opts.branch_kind == 'tags') then
+    local ref = opts.commit or ('refs/tags/' .. opts.branch)
+    local hash, err = async.git(opts.root, { 'rev-parse', '--verify', '--end-of-options', ref .. '^{commit}' })
+    if not hash then error(err, 0) end
+    opts.commit, opts.branch, opts.branch_kind = vim.trim(hash), nil, nil
+  end
+  -- Local configuration participates in identity: changing a fork/host or a
+  -- saved branch association must not reuse the former repository's PRs.
+  local config = async.git(opts.root, { 'config', '--get-regexp',
+    '^(remote[.].*[.](url|pushurl)|remote[.]pushdefault|branch[.].*[.](remote|pushremote|pullrequesturl))$' })
+  local scope = vim.json.encode({ opts.root, config or '' })
+  local repository = vim.json.encode({ scope, opts.host or '', opts.repo or '',
+    parsed and parsed.host or '', parsed and parsed.repo or '' })
+  local target
+  if explicit then target = { 'pr', (parsed and parsed.number) or opts.number or opts.url }
+  elseif opts.commit then target = { 'commit', opts.commit }
+  else target = { 'branch', opts.branch_kind == 'remote' and 'remote' or 'local', opts.branch } end
+  return { opts = opts, repository = repository, scope = scope, target = target, explicit = explicit ~= nil }
+end
+
+function M.generation(root) return cache.generation(utils.normalize_path(root)) end
+function M.invalidate(root) cache.invalidate(root and utils.normalize_path(root)) end
+
+-- Consumers receive independent results and cancellable subscriptions. Only
+-- local Git preparation is per caller; repository discovery and PR reads join.
+function M.request(opts, callback)
+  opts = vim.deepcopy(opts or {})
+  opts.root = utils.normalize_path(opts.root or opts.work_tree
+    or utils.get_buf_work_tree(opts.bufnr or vim.api.nvim_get_current_buf()) or utils.get_work_tree({}))
+  local handle, pending = {}, nil
+  function handle.cancel()
+    handle.cancelled = true
+    if pending then pending.cancel() end
+  end
+  local function publish(ok, result, expires)
+    if not handle.cancelled then callback(ok, result, expires or (vim.uv.now() + 10000)) end
+  end
+  local task, err = async.run(opts.root, function()
+    assert(opts.root, 'Not in a Git repository')
+    return prepare(opts)
+  end, function(ok, prepared)
+    if handle.cancelled then return end
+    if not ok then publish(false, prepared); return end
+    if not prepared then publish(true, { items = {} }, vim.uv.now() + 300000); return end
+    pending = cache.get(opts.root, 'repository:' .. prepared.repository, function()
+      -- A repository cache must never retain a particular PR selector.
+      return github.resolve({ root = opts.root, host = opts.host or (github.url_context(opts.url) or {}).host,
+        repo = opts.repo or (github.url_context(opts.url) or {}).repo, repository_only = true })
+    end, function(resolved, ctx, expires)
+      if handle.cancelled then return end
+      if not resolved then publish(false, ctx, expires); return end
+      local key = vim.json.encode({ prepared.scope, ctx.host:lower(), ctx.repo:lower(), prepared.target })
+      pending = cache.get(opts.root, 'related:' .. key, function()
+        local target = vim.tbl_extend('force', ctx, prepared.opts)
+        if prepared.explicit then target = github.resolve(target) end
+        return M.load(prepared.opts, target)
+      end, publish)
+    end)
+  end)
+  pending = task
+  if not task then vim.schedule(function() publish(false, err) end) end
+  return handle
+end
+
+vim.api.nvim_create_autocmd('User', {
+  group = vim.api.nvim_create_augroup('GitRelatedPRCache', { clear = true }), pattern = 'GitHubChanged',
+  callback = function(ev) M.invalidate(ev.data and ev.data.root) end,
+})
 
 function M.label(pr)
   return ('#%d [%s] %s (%s → %s)'):format(pr.number,

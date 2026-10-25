@@ -236,6 +236,7 @@ function M.open(opts)
       context = opts.url or opts.root or '', groups = groups })
   end
   local related = require('git.features.github_related')
+  local reload
   local state = { items = {} }
   local function choose(callback, predicate)
     local items = vim.tbl_filter(predicate or function() return true end, state.items)
@@ -256,6 +257,7 @@ function M.open(opts)
   end
   local function is_open(pr) return pr.state == 'OPEN' end
   local actions = {
+    { key = 'R', label = 'Refresh related PRs', keep_open = true, run = function() reload(true) end },
     pr_action('p', 'Open PR', function(target) require('git.features.pr').open(target) end),
     pr_action('b', 'Open PR in browser', function(target) vim.ui.open(target.url) end),
     { key = 'l', label = 'List pull requests', run = function() M.list(opts) end },
@@ -327,8 +329,21 @@ function M.open(opts)
     end
     ui.render()
   end
-  local task, err = async.run(opts.root, function() return related.load(opts) end, publish)
-  if not task then publish(false, err) end
+  local task
+  reload = function(force)
+    if task then task.cancel() end
+    if force then
+      related.invalidate(opts.root)
+      state.items, spec.info = {}, target_info()
+      spec.info[#spec.info + 1] = 'PR: Loading…'
+      for _, action in ipairs(actions) do
+        if action.reason then action.enabled, action.reason = false, 'PR information is still loading' end
+      end
+      ui.render()
+    end
+    task = related.request(opts, publish)
+  end
+  reload()
   vim.api.nvim_create_autocmd('BufWipeout', { buffer = ui.bufnr, once = true,
     callback = function() if task then task.cancel() end end })
   return ui

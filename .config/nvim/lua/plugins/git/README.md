@@ -427,11 +427,25 @@ The header shows up to five PRs (number, state, title, head/base and CI/review
 summary when available); all matches remain selectable. One match opens directly,
 multiple matches prompt for a choice, and PR operations are disabled while
 loading, on lookup failure, or when their required PR state does not apply.
-Closing the menu cancels its read. `tests/github_related_menu.lua` covers these
+Closing the menu detaches its subscription. `tests/github_related_menu.lua` covers these
 cursor/selection/lifetime boundaries with real local Git and mocked GitHub reads.
+
+The menu and blame preview share a five-minute in-memory cache, including empty
+results; failures are retained for ten seconds. Repository discovery is cached
+too, and simultaneous lookups for the same repository/commit or branch share one
+read. Full and abbreviated commit IDs share results. Worktrees, GitHub hosts,
+repositories and remote/branch-association configuration remain distinct. The
+cache retains at most 256 completed entries and runs up to four shared remote
+reads at once. Closing a view discards unneeded queued work; already-issued
+reads finish and warm the cache without repainting the closed view. `R` in the
+repository GitHub menu or blame clears that repository's cache. Native PR
+operations also invalidate it through `GitHubChanged`. External GitHub changes
+appear on a lookup after cache expiry or an explicit refresh. `tests/github_related_cache.lua`
+covers sharing, expiry, empty/error results, identity, invalidation and concurrency.
 
 | Repository GitHub menu key | Action |
 |---|---|
+| `R` | Refresh related PRs, bypassing the shared cache |
 | `p` / `b` | Open related PR status / open related PR in browser (choose if multiple) |
 | `l` | Choose an open PR from the repository |
 | `C` | Create default PR: edit only the prefilled title |
@@ -2457,9 +2471,11 @@ their number, state, title and head/base branches. The same window expands to
 fit the new content (up to 80 columns and the code-window height limit), counting
 wrapped rows, including wide characters. No matches leave the message and size
 unchanged; lookup errors appear inline.
-Completed results are cached per commit for the session; `R` clears this cache.
-Changing commits, closing the float, switching to a diff or leaving blame cancels
-pending PR reads; uncommitted lines do not query GitHub. Both floats adjust to
+Completed results use the shared five-minute cache described above; `R` clears
+both the local display and that repository's shared results. Changing commits,
+closing the float, switching to a diff or leaving blame detaches this preview's
+pending subscription; issued reads can finish for other views or the cache.
+Uncommitted lines do not query GitHub. Both floats adjust to
 resizing/scrolling. `tests/blame_pr_preview.lua` verifies deferred sizing and
 cursor/lifetime isolation with real local Git and controlled GitHub responses.
 

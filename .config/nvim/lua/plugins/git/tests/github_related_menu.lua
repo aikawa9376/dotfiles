@@ -2,6 +2,7 @@ local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1,
 package.path = plugin .. '/lua/?.lua;' .. plugin .. '/tests/?.lua;' .. package.path
 local f = require('helpers.pr_fixture').new()
 local actions, github = require('git.features.github_actions'), require('git.features.github')
+local related = require('git.features.github_related')
 local utils = require('git.utils')
 vim.o.columns, vim.o.lines = 160, 60
 f.delay = 30
@@ -74,11 +75,13 @@ local original_merge = actions.merge
 actions.merge = function(opts) merged = opts end
 vim.api.nvim_set_current_win(source_win)
 f.prs = { pr(8), pr(6, 'MERGED') }
+related.invalidate(f.root)
 ui = actions.open(captured); wait_for(ui, 'Open PR… (2)'); key(ui, 'm')
 assert(merged.url:find('/8$', 1) and merged.root == f.root)
 actions.merge = original_merge
 -- A single match opens directly, and the browser has its own explicit action.
 f.prs = { pr(9, 'CLOSED') }
+related.invalidate(f.root)
 local browser
 vim.ui.open = function(url) browser = url end
 ui = actions.open(captured); wait_for(ui, '#9 [closed]')
@@ -120,14 +123,15 @@ vim.b[commit].git_commit = f.base
 assert(actions.context(commit).commit == f.base)
 -- No result and read failures disable PR actions while leaving repository actions reachable.
 f.prs = {}
-ui = actions.open(captured); wait_for(ui, 'No related pull requests')
+ui = actions.open(captured)
+key(ui, 'R'); wait_for(ui, 'No related pull requests')
 opened = nil; key(ui, 'p'); assert(not opened and vim.api.nvim_buf_is_valid(ui.bufnr)); ui.close()
 local json = github.json
 github.json = function(ctx, args, opts)
   if args[1] == 'pr' and args[2] == 'list' then error('lookup failed', 0) end
   return json(ctx, args, opts)
 end
-ui = actions.open(captured); wait_for(ui, 'Could not load — lookup failed')
+ui = actions.open(captured); key(ui, 'R'); wait_for(ui, 'Could not load — lookup failed')
 key(ui, 'p'); assert(not opened); ui.close(); github.json = json
 -- An empty Branch/Log row has no target, and must not select the current branch.
 vim.api.nvim_set_current_buf(log)
@@ -146,6 +150,7 @@ assert(arg(last_call('pr', 'view'), '--repo') == 'ghe.example.test/unrelated/rep
 ui.close()
 -- Closing a loading view cancels its work; late results cannot replace a newer menu.
 f.delay = 80
+related.invalidate(f.root)
 ui = actions.open(captured); local old = ui.bufnr; ui.close()
 f.prs = { pr(15) }
 local newer = actions.open(captured); wait_for(newer, '#15 [open]')

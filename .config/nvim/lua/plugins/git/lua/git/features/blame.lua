@@ -294,7 +294,9 @@ local function preview(s)
     while #lines > 1 and lines[#lines]:match('^%s*$') do table.remove(lines) end
     if not r.uncommitted then s.messages[key] = lines end
   end
-  local prs = message and not r.uncommitted and s.preview_prs[r.commit]
+  local related = require('git.features.github_related')
+  local cached = message and not r.uncommitted and s.preview_prs[r.commit]
+  local prs = cached and cached.expires > vim.uv.now() and cached.generation == related.generation(s.root) and cached.lines
   if prs then lines = vim.list_extend(vim.list_extend({}, lines), prs) end
   local row = select(3, current(s))
   local max_height = math.max(1, vim.api.nvim_win_get_height(s.code_win) - 4)
@@ -368,10 +370,9 @@ local function preview(s)
     vim.api.nvim_win_set_config(s.float_win, config)
   end
   if not message or r.uncommitted or prs or s.preview_pr then return end
-  local request = { commit = r.commit }
+  local request = { commit = r.commit, generation = related.generation(s.root) }
   s.preview_pr = request
-  local related = require('git.features.github_related')
-  local function publish(ok, result)
+  local function publish(ok, result, expires)
     if s.preview_pr ~= request or not s.active then return end
     s.preview_pr = nil
     local extra = { '', 'Pull requests' }
@@ -381,17 +382,13 @@ local function preview(s)
       for _, pr in ipairs(result.items) do extra[#extra + 1] = related.label(pr) end
       if result.limited then extra[#extra + 1] = 'PR lookup limited to 100 results' end
     end
-    s.preview_prs[request.commit] = extra
+    s.preview_prs[request.commit] = { lines = extra, expires = expires, generation = request.generation }
     if #extra == 0 then return end
     local selected = current(s)
     if s.preview == 'message' and valid(s.float_win) and selected and selected.commit == request.commit
       and vim.api.nvim_win_get_tabpage(s.win) == vim.api.nvim_get_current_tabpage() then preview(s) end
   end
-  local task, err = require('git.features.async').run(s.root, function()
-    return related.load({ root = s.root, commit = request.commit })
-  end, publish)
-  request.task = task
-  if not task then publish(false, err) end
+  request.task = related.request({ root = s.root, commit = request.commit }, publish)
 end
 local function history_info(s, refresh)
   local f = s.history[s.index]
@@ -927,6 +924,7 @@ bind = function(s, b, code)
   map('O', function() open_commit(s, 'tab') end)
   map('R', function()
     cancel_preview_pr(s)
+    require('git.features.github_related').invalidate(s.root)
     s.preview_prs = {}
     refresh_worktree(s)
     preview(s)
@@ -1138,6 +1136,15 @@ function M.open(opts)
       local selected = current(s)
       if s.preview_pr and (not selected or selected.commit ~= s.preview_pr.commit) then cancel_preview_pr(s) end
       vim.defer_fn(function() if s.active and generation == s.preview_generation then preview(s) end end, 80)
+    end })
+    vim.api.nvim_create_autocmd('User', { group = s.group, pattern = 'GitHubChanged', callback = function(ev)
+      if ev.data and ev.data.root and ev.data.root ~= s.root then return end
+      vim.schedule(function()
+        if not s.active then return end
+        cancel_preview_pr(s)
+        s.preview_prs = {}
+        if valid(s.win) and vim.api.nvim_win_get_tabpage(s.win) == vim.api.nvim_get_current_tabpage() then preview(s) end
+      end)
     end })
     vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI', 'BufWritePost' }, { group = s.group, buffer = origin, callback = function()
       if not s.active then return end
