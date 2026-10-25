@@ -63,7 +63,19 @@ return {
         "c<space>M",
         function() require("lazyagent.logic.menu").run("LazyAgentACPPlanToggle") end,
         mode = { "n", "x" },
+        desc = "Open Agent Cockpit",
+      },
+      {
+        "c<space>c",
+        function() require("lazyagent.logic.menu").run("LazyAgentACPCockpit") end,
+        mode = { "n", "x" },
         desc = "Toggle ACP Plan/Agent Mode",
+      },
+      {
+        "c<space>F",
+        function() require("lazyagent.logic.menu").run("LazyAgentACPFullTranscript") end,
+        mode = { "n", "x" },
+        desc = "Open Agent FullTranscript",
       },
     }
     for i = 0, 9 do
