@@ -158,6 +158,10 @@ local function row_in_ranges(row, ranges)
 end
 
 local function should_skip_render(buf, capture, node, ranges)
+  if node.end_row < node.start_row
+    or (node.start_row == node.end_row and node.end_col <= node.start_col) then
+    return true
+  end
   if row_in_ranges(node.start_row, ranges) then
     return true
   end
@@ -168,9 +172,14 @@ local function should_skip_render(buf, capture, node, ranges)
 end
 
 function M.parse(ctx)
+  -- A viewport-only parse may leave edited injection trees in the parser's
+  -- cache. Do not query a collapsed root or hand its empty nodes to renderers.
+  local row, col, end_row, end_col = ctx.root:range()
+  if end_row < row or (end_row == row and end_col <= col) then return {} end
   local ts = require("render-markdown.core.ts")
   local Context = require("render-markdown.request.context")
   local Marks = require("render-markdown.lib.marks")
+  local Node = require("lazyagent.render_markdown_node")
 
   local query = ts.parse("markdown", markdown_query)
   local renders = {
@@ -204,7 +213,7 @@ function M.parse(ctx)
 
     local render = renders[capture]
     assert(render, ("unhandled markdown capture: %s"):format(capture))
-    render:execute(context, marks, node)
+    render:execute(context, marks, Node.wrap(node))
   end)
   return marks:get()
 end

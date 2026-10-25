@@ -124,6 +124,22 @@ injections never become whole-source trees and one link produces one icon.
 It records unguarded behavior for comparison, revisits the skipped fence, and
 checks that the native LanguageTree class remains unchanged.
 
+## Stale Markdown nodes and projection toggles
+
+```sh
+LAZYAGENT_PARSER_RTP=/path/to/nvim/site \
+LAZYAGENT_MARKDOWN_RTP=/path/to/render-markdown.nvim \
+timeout -k 2s 30s nvim --headless --clean -u NONE -i NONE -l tests/bench/markdown_stale_nodes.lua
+```
+
+This checks real edited injection roots, empty captures within a live root,
+unchanged nested/ordered list marks against the installed renderer, and thirty
+actual `gC` toggles with native parsing and external rendering. Fixtures are
+generated locally; providers and user history are not accessed. It does not
+reproduce the original live parser's cyclic sibling graph; the deterministic
+`markdown_node_spec.lua` supplies cycles and collapsed preceding siblings and
+requires traversal to terminate without changing the upstream node class.
+
 ## Native highlight timeout recovery
 
 ```sh
