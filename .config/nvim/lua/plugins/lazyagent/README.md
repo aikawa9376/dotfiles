@@ -357,12 +357,12 @@ require("lazyagent").setup({
     -- command transport: 未指定なら copilot -p, claude -p, gemini -p の順で使えるものを探します。
     -- command = { "copilot", "-p" },
     -- モデルを固定したい場合は CLI ごとの option をここに含めます。
-    -- command = { "copilot", "-p", "--model", "gpt-5-mini" },
+    -- command = { "copilot", "-p", "--model", "gpt-5.3-codex" },
     command_mode = "arg", -- "arg" or "stdin"
     -- api transport: まずは Copilot provider をサポート。
     -- api = {
     --   provider = "copilot",
-    --   model = "gpt-5-mini",
+    --   model = "gpt-5.3-codex",
     -- },
     timeout_ms = 90000,
     context_lines = 80,
@@ -386,7 +386,7 @@ require("lazyagent").setup({
 edit_blocks = {
   transport = "command",
   -- table: prompt を最後の引数に追加して実行
-  command = { "copilot", "-p", "--model", "gpt-5-mini" },
+  command = { "copilot", "-p", "--model", "gpt-5.3-codex" },
   command_mode = "arg",
 
   -- stdin で prompt を渡したい CLI の例
@@ -405,10 +405,10 @@ edit_blocks = {
 ```lua
 edit_blocks = {
   transport = "api",
-  command = { "copilot", "-p", "--model", "gpt-5-mini" }, -- transport を command に戻すとき用
+  command = { "copilot", "-p", "--model", "gpt-5.3-codex" }, -- transport を command に戻すとき用
   api = {
     provider = "copilot",
-    model = "gpt-5-mini",
+    model = "gpt-5.3-codex",
     -- use_response_api = true, -- codex 系モデルを使うときだけ必要なら明示
     -- extra_body = { max_tokens = 20480 },
   },

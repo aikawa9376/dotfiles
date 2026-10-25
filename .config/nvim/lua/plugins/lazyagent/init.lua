@@ -259,10 +259,11 @@ return {
     },
     edit_blocks = {
       transport = "api",
-      command = { "copilot", "--model", "gpt-5-mini", "--effort", "low", "-p" },
+      command = { "copilot", "--model", "gpt-5.3-codex", "--reasoning-effort", "low", "-p" },
       api = {
         provider = "copilot",
-        model = "gpt-5-mini",
+        model = "gpt-5.3-codex",
+        extra_body = { reasoning = { effort = "low" } },
       },
     },
   }
