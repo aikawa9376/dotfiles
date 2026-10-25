@@ -91,6 +91,9 @@ local threads = session_threads.setup({
   close_session = function(agent_name)
     return M.close_session(agent_name)
   end,
+  force_close_session = function(agent_name)
+    return M.force_close_session(agent_name)
+  end,
   resolve_active_acp_session = session_acp.resolve_active_acp_session,
   editor_registry = require("lazyagent.acp.editor_registry"),
 })
@@ -188,6 +191,7 @@ M.ensure_session = launch.ensure_session
 M.capture_and_save_session = actions.capture_and_save_session
 M.restart_session = actions.restart_session
 M.close_session = actions.close_session
+M.force_close_session = actions.force_close_session
 M.close_all_sessions = actions.close_all_sessions
 M.toggle_session = actions.toggle_session
 M.open_instant = actions.open_instant

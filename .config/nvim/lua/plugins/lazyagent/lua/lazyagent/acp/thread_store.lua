@@ -540,8 +540,9 @@ function Store:rename(thread_id, title)
   })
 end
 
-function Store:delete(thread_id)
+function Store:delete(thread_id, opts)
   thread_id = tostring(thread_id or ""):lower()
+  opts = opts or {}
   return self:_with_lock(function()
     local manifest, warning = self:_read()
     if not manifest then
@@ -550,6 +551,10 @@ function Store:delete(thread_id)
     local index, record = thread_index(manifest, thread_id)
     if not index then
       return false, "thread not found: " .. thread_id
+    end
+    local expected_pid = opts.expected_process_id ~= vim.NIL and opts.expected_process_id or nil
+    if opts.expected_process_id ~= nil and record.process_id ~= expected_pid then
+      return nil, { code = "stale_process", expected_process_id = opts.expected_process_id, current_process_id = record.process_id }
     end
     table.remove(manifest.threads, index)
     local ok, write_err = self:_write(manifest)

@@ -384,24 +384,64 @@ function M.run()
   local original_select = vim.ui.select
   local orphan_metadata = records[THREAD_ID].metadata
   records[THREAD_ID].metadata = { editor = { owner_pid = vim.fn.getpid(), instance_id = "other-editor" } }
-  assert_equal(actions.close_disconnected_thread(THREAD_ID), false, "another live editor retains process ownership")
-  records[THREAD_ID].metadata = orphan_metadata
   vim.ui.select = function(_, _, callback) callback("Cancel") end
-  assert_equal(actions.close_disconnected_thread(THREAD_ID), true, "orphan stop offers confirmation")
+  assert_equal(actions.close_disconnected_thread(THREAD_ID), true, "foreign process stop offers confirmation")
   assert_equal(require("lazyagent.acp.process").inspect(orphan.pid).alive, true, "cancel keeps process alive")
   assert_equal(records[THREAD_ID].status, "active", "cancel keeps thread active")
+  local captured_pid = records[THREAD_ID].process_id
+  vim.ui.select = function(_, _, callback)
+    records[THREAD_ID].process_id = captured_pid + 1
+    callback("Stop process and close thread")
+  end
+  actions.close_disconnected_thread(THREAD_ID)
+  assert_equal(require("lazyagent.acp.process").inspect(orphan.pid).alive, true, "changed ownership prevents killing the captured process")
+  records[THREAD_ID].process_id = captured_pid
   vim.ui.select = function(_, _, callback) callback("Stop process and close thread") end
   local recovering = actions.close_disconnected_thread(THREAD_ID)
   vim.ui.select = original_select
-  assert_equal(recovering, true, "disconnected live process can be stopped with confirmation")
+  assert_equal(recovering, true, "foreign live process can be stopped with confirmation")
   assert(vim.wait(3000, function() return records[THREAD_ID].status == "closed" and process_exited end, 10),
     "stopped disconnected process becomes closed")
   assert_equal(records[THREAD_ID].process_id, nil, "stopping orphan clears PID")
-  assert_equal(records[THREAD_ID].metadata, preserved_metadata, "stopping orphan keeps history metadata")
+  assert_equal(records[THREAD_ID].metadata.editor.instance_id, "other-editor", "stopping a foreign agent preserves metadata")
+  assert_equal(require("lazyagent.acp.process").inspect(vim.fn.getpid()).alive, true, "stopping an agent never stops its owner editor")
+  records[THREAD_ID].metadata = orphan_metadata
+
+  -- A confirmed kill bypasses a second prompt and SIGTERM handlers, but keeps
+  -- history until process exit is observed.
+  local killed = false
+  local stubborn = vim.system({ "python", "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); time.sleep(30)" }, {
+    stdout = function(_, data) if data and data:find("ready", 1, true) then killed = "ready" end end,
+  }, function() killed = true end)
+  assert(vim.wait(2000, function() return killed == "ready" end, 10))
+  records[THREAD_ID].status, records[THREAD_ID].process_id = "active", stubborn.pid
+  vim.ui.select = function() error("a confirmed kill must not prompt again") end
+  assert_equal(actions.close_disconnected_thread(THREAD_ID, nil, { confirmed = true, kill = true }), true)
+  vim.ui.select = original_select
+  assert(vim.wait(3000, function() return killed == true and records[THREAD_ID].status == "closed" end, 10), "kill closes a process that ignores SIGTERM")
+  assert_equal(records[THREAD_ID].metadata, preserved_metadata, "kill preserves history metadata")
+
+  local ignored, ready = false, false
+  local ignores_term = vim.system({ "python", "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); time.sleep(30)" }, {
+    stdout = function(_, data) if data and data:find("ready", 1, true) then ready = true end end,
+  }, function() ignored = true end)
+  assert(vim.wait(2000, function() return ready end, 10))
+  records[THREAD_ID].status, records[THREAD_ID].process_id = "active", ignores_term.pid
+  vim.ui.select = function(_, _, callback) callback("Stop process and close thread") end
+  actions.close_disconnected_thread(THREAD_ID)
+  vim.ui.select = original_select
+  assert(vim.wait(3000, function() return ignored and records[THREAD_ID].status == "closed" end, 10),
+    "normal stop escalates when SIGTERM is ignored")
+
+  local deleted_process = false
+  local to_delete = vim.system({ "sleep", "30" }, {}, function() deleted_process = true end)
+  records[THREAD_ID].status, records[THREAD_ID].process_id = "active", to_delete.pid
   local stale_transcript_path = vim.fn.tempname() .. "-stale-thread-transcript.log"
   vim.fn.writefile({ "# User", "stale" }, stale_transcript_path)
   records[THREAD_ID].transcript_path = stale_transcript_path
   assert_equal(actions.force_delete_thread(THREAD_ID), true, "force delete active record")
+  assert(vim.wait(3000, function() return records[THREAD_ID] == nil and deleted_process end, 10),
+    "force delete kills the process before removing its history")
   assert_equal(records[THREAD_ID], nil, "force deleted thread record")
   assert_equal(vim.fn.filereadable(stale_transcript_path), 0, "force deleted thread transcript")
 
@@ -839,6 +879,38 @@ function M.run()
   vim.cmd("normal O")
   assert_equal(opened.agent_name, session_key, "cockpit O opens the exact live agent under the cursor")
   assert_equal(opened.focus_agent_view, true, "cockpit O focuses the selected ACP buffer")
+
+  local KILL_ID = "123e4567-e89b-42d3-a456-426614174097"
+  local menu_killed = false
+  local menu_process = vim.system({ "sleep", "30" }, {}, function() menu_killed = true end)
+  records[KILL_ID] = {
+    thread_id = KILL_ID, provider_id = "Codex", title = "Kill menu external", cwd = "/tmp/kill-menu",
+    status = "active", process_id = menu_process.pid, transcript_path = cockpit_transcript_path,
+    metadata = { has_user_prompt = true, editor = { owner_pid = vim.fn.getpid(), instance_id = "other-editor" } },
+  }
+  vim.cmd("normal r")
+  move_to("Kill menu external")
+  local kill_prompts = 0
+  vim.ui.select = function(_, _, callback)
+    records[KILL_ID].process_id = menu_process.pid + 1
+    callback("Kill process (keep history)")
+  end
+  vim.cmd("normal d")
+  assert_equal(require("lazyagent.acp.process").inspect(menu_process.pid).alive, true,
+    "d must not kill an earlier owner after its confirmation selection changes")
+  records[KILL_ID].process_id = menu_process.pid
+  vim.ui.select = function(items, _, callback)
+    kill_prompts = kill_prompts + 1
+    assert(vim.tbl_contains(items, "Kill process (keep history)"), "d offers an explicit kill alongside history deletion")
+    callback("Kill process (keep history)")
+  end
+  vim.cmd("normal d")
+  vim.ui.select = original_select
+  assert(vim.wait(3000, function() return menu_killed and records[KILL_ID].status == "closed" end, 10),
+    "d kill stops an external agent and makes it resumable")
+  assert_equal(kill_prompts, 1, "the chosen kill action does not ask again")
+  assert_equal(vim.fn.filereadable(cockpit_transcript_path), 1, "d kill preserves the transcript")
+  records[KILL_ID] = nil
   vim.cmd("normal q")
   assert(
     vim.wo[selected_acp_winid].winhighlight:find("Normal:TestACPActive,NormalNC:TestACPUsual", 1, true),

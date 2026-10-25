@@ -684,7 +684,7 @@ Cockpitの`f`は全thread / 要対応thread viewを切り替え、`[e` / `]e`で
 
 本文走査とsnapshot読込は別のheadless workerで明示実行し、cursor移動・preview・refreshでは再検索しません。1行につき最初の一致を返し、最大200件・20件/thread・1000 thread・64 MiB総読込・8 MiB/file・約6秒の走査上限を設けます。上限到達と、transcript欠落・大きすぎるfile・binary・走査中に変わったfileの件数を表示します。検索対象は保存transcriptの本文・回答・tool表示です。transcript外の生tool出力・未保存buffer・未取得のnative履歴は検索しません。位置を開くときに保存した周辺文字列とline/columnを再確認し、本文が移動・変更・置換されていれば再検索を促します。末尾への追記だけなら既存位置を開けます。表示するsnapshotは実transcriptのbufferと独立し、`q`で閉じます。検索結果または親Cockpitを閉じると待機workerを停止します。
 
-Cockpitでは`/` filter、`R` rename、`p` pin、`a` archive/restore、`d` delete、`D` force delete、`X` running ACP process一括stopを使えます。`x`はlive processを確認後に停止し、disconnected threadでも、processが残っていれば確認後にSIGTERMで停止し、終了確認後に履歴を保持して`closed`へ戻します。別のlive Neovimが所有するthreadはそのNeovimで停止します。processの生死を確認できない場合や停止要求後も終了しない場合は`disconnected`を維持します。停止済みの履歴自体を消す場合は`d`を使います。processが残っているthreadを履歴ごと破棄する場合だけ`D`を使います。
+Cockpitでは`/` filter、`R` rename、`p` pin、`a` archive/restore、`d` kill/delete menu、`D` force delete、`X` running ACP process一括stopを使えます。`x`は確認後にprocessを停止し、別のlive Neovimが所有する`external` threadも対象です。別Neovimの本体は停止せず、そのthreadのagent processだけにSIGTERMを送り、約1秒で終了しなければSIGKILLへ切り替えます。終了確認後に履歴を保持して`closed`へ戻します。`d`の`Kill process (keep history)`は、追加確認なしでagent processを強制停止し、履歴を再開可能な状態で残します。`d`の`Delete`または`D`の`Force delete`は、processが残っていれば停止・終了確認してから履歴も削除します。PID・process identity・所有editorが選択後に変わった場合は停止を中止し、processの生死を確認できない場合や終了を確認できない場合も履歴を残します。ローカルthreadのkill/deleteは、応答完了待ちをせず既存sessionの強制終了処理を使います。
 
 agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
 

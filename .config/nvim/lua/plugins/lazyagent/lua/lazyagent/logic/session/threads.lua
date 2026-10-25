@@ -10,6 +10,7 @@ function M.setup(deps)
   local acp_logic = deps.acp_logic
   local start_interactive_session = deps.start_interactive_session
   local close_session = deps.close_session
+  local force_close_session = deps.force_close_session or close_session
   local resolve_active_acp_session = deps.resolve_active_acp_session
   local editor_registry = deps.editor_registry or require("lazyagent.acp.editor_registry")
   local module = {}
@@ -182,6 +183,13 @@ function M.setup(deps)
     return { owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id }
   end
 
+  local function same_process_owner(before, after)
+    if not before or not after or before.process_id ~= after.process_id then return false end
+    local old = before.metadata or {}
+    local new = after.metadata or {}
+    return old.process_identity == new.process_identity and vim.deep_equal(old.editor, new.editor)
+  end
+
   local function recover_stopped_thread(backend, thread)
     if thread.status ~= "active" or local_session_key(thread.thread_id)
       or cockpit.thread_status(thread, nil, owner_options()) ~= "closed"
@@ -210,21 +218,19 @@ function M.setup(deps)
     return nil, "owner_changed"
   end
 
-  function module.close_disconnected_thread(thread_id, on_closed)
+  function module.close_disconnected_thread(thread_id, on_closed, opts)
+    opts = opts or {}
     local backend, thread = thread_backend(thread_id)
     if not backend or not thread then
       vim.notify("LazyAgent ACP: thread not found: " .. tostring(thread_id), vim.log.levels.WARN)
       return false
     end
+    thread = vim.deepcopy(thread)
     if thread.status ~= "active" or local_session_key(thread_id) then
       vim.notify("LazyAgent ACP: selected thread is not disconnected", vim.log.levels.INFO)
       return false
     end
     local status = cockpit.thread_status(thread, nil, owner_options())
-    if status == "external" then
-      vim.notify("LazyAgent ACP: this thread is controlled by another live Neovim; stop it there", vim.log.levels.WARN)
-      return false
-    end
     local function finish()
       local updated, err = backend.update_thread(thread.thread_id, {
         status = "closed", process_id = vim.NIL,
@@ -245,14 +251,12 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: cannot safely stop this process: " .. tostring(info.error or thread.process_id), vim.log.levels.WARN)
       return false
     end
-    vim.ui.select({ "Cancel", "Stop process and close thread" }, {
-      prompt = "Stop disconnected ACP process " .. tostring(thread.process_id) .. "? History will be kept.",
-    }, function(choice)
-      if choice ~= "Stop process and close thread" then return end
+    local function same_owner(latest)
+      return same_process_owner(thread, latest) and not local_session_key(thread_id)
+    end
+    local function stop()
       local latest = backend.get_thread(thread_id)
-      if not latest or latest.process_id ~= thread.process_id or local_session_key(thread_id)
-        or cockpit.thread_status(latest, nil, owner_options()) == "external"
-      then
+      if not same_owner(latest) then
         vim.notify("LazyAgent ACP: thread ownership changed; refresh before retrying", vim.log.levels.WARN)
         return
       end
@@ -262,7 +266,7 @@ function M.setup(deps)
         return
       end
       if current.alive ~= true then return end
-      local ok, result, err = pcall((vim.uv or vim.loop).kill, tonumber(thread.process_id), "sigterm")
+      local ok, result, err = pcall((vim.uv or vim.loop).kill, tonumber(thread.process_id), opts.kill and "sigkill" or "sigterm")
       if not ok or result ~= 0 then
         vim.notify("LazyAgent ACP: failed to stop process: " .. tostring(err or result), vim.log.levels.WARN)
         return
@@ -274,18 +278,39 @@ function M.setup(deps)
           finish()
         elseif attempts < 40 then
           attempts = attempts + 1
+          -- Explicit stop must also work for agents that ignore SIGTERM. Check
+          -- the captured owner again before escalating; never signal the editor.
+          if attempts == 20 and not opts.kill then
+            if not same_owner(backend.get_thread(thread_id)) then
+              vim.notify("LazyAgent ACP: thread ownership changed; refresh before retrying", vim.log.levels.WARN)
+              return
+            end
+            local killed, result, err = pcall((vim.uv or vim.loop).kill, tonumber(thread.process_id), "sigkill")
+            if not killed or result ~= 0 then
+              vim.notify("LazyAgent ACP: failed to kill process: " .. tostring(err or result), vim.log.levels.WARN)
+              return
+            end
+          end
           vim.defer_fn(await_exit, 50)
         else
-          vim.notify("LazyAgent ACP: process has not exited; history is kept and the thread remains disconnected", vim.log.levels.WARN)
+          vim.notify("LazyAgent ACP: process has not exited; history is kept and the thread remains active", vim.log.levels.WARN)
         end
       end
       await_exit()
+    end
+    if opts.confirmed then stop(); return true end
+    local action = "Stop process and close thread"
+    vim.ui.select({ "Cancel", action }, {
+      prompt = "Stop ACP process " .. tostring(thread.process_id)
+        .. (status == "external" and " in another Neovim" or "") .. "? History will be kept.",
+    }, function(choice)
+      if choice == action then stop() end
     end)
     return true
   end
 
   local function delete_thread_record(backend, thread)
-    local deleted, err = backend.delete_thread(thread.thread_id)
+    local deleted, err = backend.delete_thread(thread.thread_id, { expected_process_id = thread.process_id or vim.NIL })
     if deleted ~= true then
       vim.notify("LazyAgent ACP: delete failed: " .. tostring(err), vim.log.levels.ERROR)
       return false
@@ -660,12 +685,25 @@ function M.setup(deps)
     return delete_thread_record(backend, thread)
   end
 
-  function module.force_delete_thread(thread_id)
+  function module.force_delete_thread(thread_id, on_deleted)
+    local local_key = local_session_key(thread_id)
+    if local_key then force_close_session(local_key) end
     local backend, thread = thread_backend(thread_id)
     if not backend or not thread then
       return false
     end
-    return delete_thread_record(backend, thread)
+    local function remove()
+      local latest = backend.get_thread(thread_id)
+      if not latest then return false end
+      if active_mutation_error(latest, "deleting") then return false end
+      local deleted = delete_thread_record(backend, latest)
+      if deleted and on_deleted then on_deleted() end
+      return deleted
+    end
+    if thread.status == "active" and thread.process_id ~= nil then
+      return module.close_disconnected_thread(thread_id, remove, { confirmed = true, kill = true })
+    end
+    return remove()
   end
 
   function module.show_thread_changes(thread_id)
@@ -1869,21 +1907,51 @@ function M.setup(deps)
     vim.keymap.set("n", "d", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if not id then return end
-      vim.ui.select({ "Cancel", "Delete" }, { prompt = "Delete cockpit thread permanently?" }, function(choice)
-        if choice == "Delete" then module.delete_thread(id); refresh() end
+      local _, thread = thread_backend(id)
+      thread = vim.deepcopy(thread)
+      local options = { "Cancel" }
+      if thread and thread.process_id ~= nil then options[#options + 1] = "Kill process (keep history)" end
+      options[#options + 1] = "Delete"
+      local function refreshed()
+        if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+      end
+      vim.ui.select(options, { prompt = "Kill process or delete cockpit history permanently?" }, function(choice)
+        if choice ~= "Kill process (keep history)" and choice ~= "Delete" then return end
+        local _, latest = thread_backend(id)
+        if not same_process_owner(thread, latest) then
+          vim.notify("LazyAgent ACP: thread ownership changed; refresh before retrying", vim.log.levels.WARN)
+          return
+        end
+        if choice == "Kill process (keep history)" then
+          local agent_name = thread_agents[id]
+          if agent_name then
+            force_close_session(agent_name)
+            vim.defer_fn(refreshed, 150)
+          else
+            module.close_disconnected_thread(id, refreshed, { confirmed = true, kill = true })
+          end
+        elseif choice == "Delete" then
+          module.force_delete_thread(id, refreshed)
+        end
       end)
-    end, { buffer = bufnr, silent = true, desc = "Delete ACP cockpit thread" })
+    end, { buffer = bufnr, silent = true, desc = "Kill ACP process or delete thread history" })
     vim.keymap.set("n", "D", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if not id then return end
+      local _, thread = thread_backend(id)
+      thread = vim.deepcopy(thread)
       vim.ui.select({ "Cancel", "Force delete" }, {
         prompt = "Force delete cockpit thread and stop its process? This cannot be undone.",
       }, function(choice)
         if choice ~= "Force delete" then return end
-        local agent_name = thread_agents[id]
-        if agent_name then close_session(agent_name) end
-        module.force_delete_thread(id)
-        refresh()
+        local _, latest = thread_backend(id)
+        if not same_process_owner(thread, latest) then
+          vim.notify("LazyAgent ACP: thread ownership changed; refresh before retrying", vim.log.levels.WARN)
+          return
+        end
+        module.force_delete_thread(id, function()
+          if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+        end)
       end)
     end, { buffer = bufnr, silent = true, desc = "Force delete ACP cockpit thread" })
     vim.keymap.set("n", "c", function()
@@ -1936,7 +2004,7 @@ function M.setup(deps)
         { key = "t", description = "Run thread test" },
         { key = "a", description = "Archive or restore thread" },
         { key = "c", description = "Clean up managed worktree" },
-        { key = "d", description = "Delete stopped thread" },
+        { key = "d", description = "Kill process (keep history) or delete thread" },
         { key = "D", description = "Force delete thread" },
         { key = "X", description = "Stop all processes" },
         { key = "r", description = "Refresh cockpit" },

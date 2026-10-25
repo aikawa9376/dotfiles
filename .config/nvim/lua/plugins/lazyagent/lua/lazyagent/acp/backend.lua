@@ -1841,8 +1841,8 @@ local function create_backend(default_view)
     return updated
   end
 
-  function backend.delete_thread(thread_id)
-    local deleted, record_or_err = thread_store:delete(thread_id)
+  function backend.delete_thread(thread_id, opts)
+    local deleted, record_or_err = thread_store:delete(thread_id, opts)
     if deleted == true and type(record_or_err) == "table" then
       for _, path in ipairs({ record_or_err.transcript_path, record_or_err.history_path }) do
         if path and path ~= "" then pcall(vim.fn.delete, path) end
