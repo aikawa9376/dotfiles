@@ -48,6 +48,11 @@ action opens Diffview with that PR association preserved. Changing the range
 invalidates this explicit association and discovers relationships for the new
 comparison instead.
 
+Returning to a file preserves a closed unchanged-region fold when the cursor
+was on its heading. This also applies to long folds and rapid file switching.
+An explicitly targeted line or a cursor carried into another revision still
+opens the enclosing fold so the destination code remains visible.
+
 Relationships use GitHub's paginated
 [commit-associated PR endpoint](https://docs.github.com/en/rest/commits/commits#list-pull-requests-associated-with-a-commit).
 Single/history comparisons check the chosen commit; ranges check up to the most
@@ -98,6 +103,7 @@ nvim --headless --clean -u NONE -i NONE -l tests/comparison.lua
 nvim --headless --clean -u NONE -i NONE -l tests/github_context.lua
 nvim --headless --clean -u NONE -i NONE -l tests/comment_projection.lua
 nvim --headless --clean -u NONE -i NONE -l tests/pr_comments.lua
+nvim --headless --clean -u NONE -i NONE -l tests/fold_navigation.lua
 ```
 
 The existing custom-review and commit-navigation smoke checks require the full
