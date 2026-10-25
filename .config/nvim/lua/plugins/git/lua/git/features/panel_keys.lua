@@ -260,6 +260,10 @@ function M.configure(buf, opts)
       local value = require('git.features.syntax_highlight').toggle_changed_fg()
       vim.notify('Diff foreground: ' .. value, vim.log.levels.INFO)
     end }
+    state.display[#state.display + 1] = { menu_key = 'n', label = 'Toggle new-file diff colors', callback = function()
+      local enabled = require('git.features.syntax_highlight').toggle_new_file_highlight()
+      vim.notify('New-file diff colors: ' .. (enabled and 'on' or 'off'), vim.log.levels.INFO)
+    end }
   end
   local old_copy = mapping(buf, '<C-y>', 'x')
   if old_copy.buffer == 1 and old_copy.callback then

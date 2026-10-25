@@ -33,6 +33,7 @@ local function current(s, revision)
     and s.old.tick == api.nvim_buf_get_changedtick(s.old.buf)
     and s.new.tick == api.nvim_buf_get_changedtick(s.new.buf)
     and s.style == syntax.config.word_diff_style
+    and s.highlight_new_files == syntax.config.highlight_new_files
 end
 local function redraw(s)
   for _, side in ipairs({ 'old', 'new' }) do
@@ -94,7 +95,7 @@ local function publish(s, revision, changes)
     for _, side in ipairs({ 'old', 'new' }) do
       local rows, lines = s.changed[side], s[side].lines
       local count = 0
-      for row in pairs(rows) do
+      for row in pairs(side == 'new' and s.new_file and not s.highlight_new_files and {} or rows) do
         count = count + 1
         if count % 32 == 0 then checkpoint() end
         local added = side == 'new'
@@ -146,14 +147,18 @@ refresh = function(s)
   local style = syntax.config.word_diff_style
   local opts = vim.mpack.encode(syntax.diff_opts())
   local fg = syntax.config.changed_fg
+  local highlight_new_files = syntax.config.highlight_new_files
+  local new_file = api.nvim_buf_get_name(s.old.buf) == 'diffview://null' or vim.b[s.old.buf].git_diff_missing == true
   local old_tick, new_tick = api.nvim_buf_get_changedtick(s.old.buf), api.nvim_buf_get_changedtick(s.new.buf)
-  if s.old.tick == old_tick and s.new.tick == new_tick and s.style == style and s.opts == opts and s.fg == fg then
+  if s.old.tick == old_tick and s.new.tick == new_tick and s.style == style and s.opts == opts and s.fg == fg
+    and s.highlight_new_files == highlight_new_files and s.new_file == new_file then
     if s.pending and s.sources and not s.parsing then compare(s, s.revision) end
     return
   end
   local changed = s.old.tick ~= old_tick or s.new.tick ~= new_tick
   if s.parsing then s.sources = nil end
   s.revision, s.style, s.opts, s.fg = s.revision + 1, style, opts, fg
+  s.highlight_new_files, s.new_file = highlight_new_files, new_file
   s.old.tick, s.new.tick = old_tick, new_tick
   if changed then
     s.sources = nil
@@ -178,6 +183,9 @@ refresh = function(s)
   end, function() return current(s, revision) end, function(done, err)
     if not done then if err ~= 'cancelled' then close(s); vim.notify('Split diff: ' .. tostring(err), vim.log.levels.WARN) end; return end
     if #s.blocks == 0 then publish(s, revision, { old = {}, new = {} }); return end
+    if s.new_file and not s.highlight_new_files then
+      publish(s, revision, { old = {}, new = {} }); return
+    end
     if style ~= 'treesitter' then
       jobs.run(function(checkpoint)
         local result = { old = {}, new = {} }

@@ -1485,6 +1485,7 @@ function M.diff_sides(bufnr, row)
 
   return {
     path = entry.path,
+    new_file = entry.section == 'untracked' or entry.head_blob == nil,
     left = entry.section == 'untracked' and {} or blob_lines(model, 'HEAD', entry.old_path or entry.path),
     right = worktree_lines(model, entry.path),
     left_label = entry.section == 'untracked' and 'empty' or 'HEAD',

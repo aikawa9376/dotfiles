@@ -1499,6 +1499,23 @@ uses `git*` filetypes and metadata, and publishes `GitChanged` after mutations.
 
 ## Commit details
 
+Entirely new files (including untracked files) keep source syntax colors but
+have no addition tint by default, in Status, Commit, PR patches and two-pane
+diffs including Diffview. Additions within existing files, including previously
+empty files, and deletion colors retain their existing appearance.
+In Status/Commit/PR, `gD` then `n` toggles new-file diff colors for all open views.
+To make the previous colored appearance the startup default, use:
+
+```lua
+require('git').setup({ highlight_new_files = true })
+```
+
+The runtime API is
+`require('git.features.syntax_highlight').set_highlight_new_files(true)`; pass
+`false` to restore the default. Diffview-only sessions can use this API too.
+This setting controls the diff tint and prefix overlay inside new-file content;
+file-status labels and change counts retain their status colors.
+
 Status and Commit default to the `treesitter` word-diff style. In `gD` (Display
 settings), choose “Cycle word-diff style” to cycle through `diffs`, `delta`,
 `treesitter`, and `github`. These styles compute changes inside Neovim; no `delta`
@@ -1517,8 +1534,9 @@ not applied. Code colors and muted line/word backgrounds remain those of this UI
 With a Tree-sitter parser, `treesitter` style converts syntax into atoms and
 lists with paired opening/closing delimiters, then finds a lowest-cost matching
 path using Difftastic 0.71.0's cost rules. Unchanged identifiers and delimiters
-survive line splitting/joining; added arguments, statements and one-sided files
-receive backgrounds on their syntax spans. Syntax foreground colors remain
+survive line splitting/joining; added arguments, statements and one-sided changes
+receive backgrounds on their syntax spans, with new files following the setting
+above. Syntax foreground colors remain
 those of the current theme. Formatting whitespace outside syntax is uncolored.
 Changed strings/comments use a muted background for the changed atom and a
 stronger background for changed words inside it when enough common words remain,
@@ -1636,6 +1654,9 @@ native rendering. `tests/split_diff.lua`, `tests/split_diff_views.lua` and
 `tests/split_diff_ui.py` cover selected styles, exact source coordinates,
 native cancellation, real provider integration, null sides, and actual TUI
 syntax/background composition and window isolation.
+`tests/new_file_highlight.lua` additionally checks all four styles, live toggles,
+raw/untracked patches, preserved source syntax, existing empty files, deletions,
+the Status display menu and real Status/Commit inline and split views.
 
 Outside inline panels, `]]` / `[[` cycle through next / previous hunks, wrapping
 at either end; counts are supported. Native diff windows (Status/Commit/PR/Blame

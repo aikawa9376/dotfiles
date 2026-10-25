@@ -136,12 +136,19 @@ end
 assert(added_ready, 'Diffview null side did not finish')
 assert(not second.active, 'Diffview addition retained the preceding source pair')
 second = split.session(view.cur_layout.b.id)
+assert(second.new_file and next(second.plan.new) == nil and next(second.plan.old) == nil,
+  'a new Diffview file should retain syntax without addition tint by default')
+syntax.set_highlight_new_files(true)
+assert(vim.wait(10000, function() return not second.pending end, 5))
 assert(next(second.plan.old) == nil and second.plan.new[0], 'Diffview addition projected onto null side')
 for _, mark in ipairs(second.plan.new[0]) do
   assert(mark.col >= 2 and not mark.options.sign_text and not mark.options.hl_eol,
     'one-sided code addition tinted indentation, gutter or the whole line')
   assert(mark.options.hl_group == 'GitExtSyntaxAdd', 'one-sided addition incorrectly emphasized words')
 end
+syntax.set_highlight_new_files(false)
+assert(vim.wait(10000, function() return not second.pending end, 5))
+assert(next(second.plan.new) == nil, 'turning new-file colors off left stale split decorations')
 view:close()
 assert(vim.wait(1000, function() return not second.active end, 5), 'Diffview close retained session')
 vim.fn.delete(root, 'rf')

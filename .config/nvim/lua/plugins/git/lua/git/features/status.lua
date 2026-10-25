@@ -998,11 +998,12 @@ local function open_oil_in_target(bufnr, path)
   return ok
 end
 
-local function show_diff_side(winid, side, path, label, root)
+local function show_diff_side(winid, side, path, label, root, missing)
   local bufnr = vim.api.nvim_create_buf(false, true)
   local names = require('git.buffer_names')
   names.assign(bufnr, names.uri('git-diff', root, label .. '/' .. path))
   utils.set_buf_work_tree(bufnr, root)
+  vim.b[bufnr].git_diff_missing = missing == true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, #side > 0 and side or { '' })
   vim.bo[bufnr].buftype = 'nofile'
   vim.bo[bufnr].bufhidden = 'wipe'
@@ -1021,7 +1022,7 @@ local function open_scratch_diff(sides, target_line, layout, root)
   vim.cmd('tabnew')
   local placeholder = vim.api.nvim_get_current_buf()
   local left_win = vim.api.nvim_get_current_win()
-  show_diff_side(left_win, sides.left, sides.path, sides.left_label, root)
+  show_diff_side(left_win, sides.left, sides.path, sides.left_label, root, sides.new_file)
   if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
   end
@@ -1070,7 +1071,7 @@ local function open_diff_with_current_file(work_tree, sides, target_line, layout
 
   vim.cmd(layout == 'horizontal' and 'aboveleft split' or 'leftabove vsplit')
   local base_win = vim.api.nvim_get_current_win()
-  show_diff_side(base_win, sides.left, sides.path, sides.left_label, work_tree)
+  show_diff_side(base_win, sides.left, sides.path, sides.left_label, work_tree, sides.new_file)
   vim.api.nvim_win_call(current_win, function() vim.cmd('diffthis') end)
   vim.cmd('wincmd =')
 

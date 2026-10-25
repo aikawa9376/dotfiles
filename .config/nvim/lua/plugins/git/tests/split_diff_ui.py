@@ -49,14 +49,21 @@ vim.api.nvim_create_autocmd('VimEnter',{once=true,callback=function() vim.schedu
   return result
  end
  local cold=snapshot();local deadline=vim.uv.hrtime()+10e9
- local result={cold=cold};local phase=0
+ local result={cold=cold,colors={syntax_add=vim.api.nvim_get_hl(0,{name='GitExtSyntaxAdd',link=false}).bg}};local phase=0
  local function finish()
   assert(vim.uv.hrtime()<deadline,'split TUI timeout')
   if s.pending then vim.defer_fn(finish,10);return end
   if phase==0 then result.ready=snapshot();syntax.toggle_changed_fg();phase=1
   elseif phase==1 then result.foreground=snapshot();syntax.set_word_diff_style('delta');phase=2
   elseif phase==2 then
-   result.delta=snapshot();vim.fn.writefile({vim.json.encode(result)},'OUTPUT');vim.cmd('qa!');return
+   result.delta=snapshot()
+   vim.b[left].git_diff_missing=true
+   vim.api.nvim_buf_set_lines(left,0,-1,false,{''})
+   split.refresh_for(left);phase=3
+  elseif phase==3 then
+   result.new_file=snapshot();syntax.set_highlight_new_files(true);phase=4
+  elseif phase==4 then
+   result.new_file_legacy=snapshot();vim.fn.writefile({vim.json.encode(result)},'OUTPUT');vim.cmd('qa!');return
   end
   vim.defer_fn(finish,10)
  end
@@ -87,10 +94,13 @@ end) end})
         assert result['new'][0][0]=='f', (phase,'split unexpectedly has a gutter overlay')
     assert results['ready']['new'][0][1]['foreground']==0xee77aa, 'Tree-sitter keyword color lost'
     assert results['ready']['new'][26][1]['foreground']==0x88bbcc, 'Tree-sitter parameter color lost'
-    assert bg(results['ready']['new'][26])==0x1f4534, 'new argument has no structural background'
+    assert bg(results['ready']['new'][26])==results['colors']['syntax_add'], 'new argument has no structural background'
     assert results['foreground']['new'][26][1]['foreground'] != 0x88bbcc, 'foreground option ignored'
-    assert bg(results['foreground']['new'][26])==0x1f4534, 'foreground changed background classification'
+    assert bg(results['foreground']['new'][26])==results['colors']['syntax_add'], 'foreground changed background classification'
     assert bg(results['delta']['new'][0])==0x23384c, 'delta did not restore ordinary line background'
     assert bg(results['delta']['new'][26])==0x005f5f, 'delta word accent missing'
     assert all(bg(cell)==0x002b36 for cell in results['delta']['ordinary']), 'delta leaked to ordinary window'
+    assert all(bg(cell)==0x002b36 for cell in results['new_file']['new']), 'new file still has native or custom addition tint'
+    assert results['new_file']['new'][0][1]['foreground']==0xee77aa, 'untinted new file lost its syntax foreground'
+    assert bg(results['new_file_legacy']['new'][0])==0x23384c, 'new-file option did not restore legacy tint'
 print('PASS: split TUI pending/ready spans, syntax/native foregrounds, delta and ordinary-window isolation')

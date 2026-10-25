@@ -2,6 +2,9 @@ local M = {}
 
 function M.setup(opts)
   opts = opts or {}
+  if opts.highlight_new_files ~= nil then
+    require('git.features.syntax_highlight').set_highlight_new_files(opts.highlight_new_files)
+  end
   if opts.word_diff_style then
     local selected, err = require('git.features.syntax_highlight').set_word_diff_style(opts.word_diff_style)
     assert(selected, err)

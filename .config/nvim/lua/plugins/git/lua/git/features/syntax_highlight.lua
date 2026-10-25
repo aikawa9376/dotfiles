@@ -8,7 +8,7 @@ local highlight_sources = require('git.features.highlight_sources')
 -- 'delta': delta 0.19.2 token alignment and forward line pairing
 -- 'treesitter': paired syntax lists and atoms, with token-only backgrounds
 -- 'github':  sequential line pairing (old[i] <-> new[i])
-M.config = { word_diff_style = 'treesitter', changed_fg = 'syntax', prefetch = true }
+M.config = { word_diff_style = 'treesitter', changed_fg = 'syntax', prefetch = true, highlight_new_files = false }
 
 local WORD_DIFF_STYLES = { 'diffs', 'delta', 'treesitter', 'github' }
 
@@ -461,6 +461,7 @@ function Parser.parse_buffer(bufnr, first_line)
     filename = nil,
     lang = nil,
     ft = nil,
+    new_file = false,
     hunk_start = nil,
     lines = {}
   }
@@ -473,6 +474,7 @@ function Parser.parse_buffer(bufnr, first_line)
         ft = state.ft,
         start_line = state.hunk_start,
         old_start = state.old_start, new_start = state.new_start,
+        new_file = state.new_file,
         lines = state.lines,
       })
     end
@@ -495,7 +497,11 @@ function Parser.parse_buffer(bufnr, first_line)
       flush()
       state.filename = filename
       state.ft, state.lang = Parser.get_lang_info(filename)
+      local status = line:match('^%s*([A?])%s')
+      state.new_file = status ~= nil
 
+    elseif line:match('^new file mode ') or line == '--- /dev/null' then
+      state.new_file = true
     elseif line:match('^@@.-@@') then
       flush()
       state.hunk_start = i -- line index of the header line
@@ -510,6 +516,7 @@ function Parser.parse_buffer(bufnr, first_line)
         state.filename = nil
         state.lang = nil
         state.ft = nil
+        state.new_file = false
       end
     end
   end
@@ -522,8 +529,18 @@ end
 
 local Highlighter = {}
 local recording = {}
+local addition_groups = {
+  GitExtAdd = true, GitExtAddText = true, GitExtSyntaxAdd = true,
+  GitExtSyntaxAddText = true, GitExtNovelAdd = true,
+}
 
 function Highlighter.record_mark(cached, bufnr, ns, row, col, options)
+  if cached.hunk and cached.hunk.new_file and not M.config.highlight_new_files then
+    if addition_groups[options.hl_group] then return end
+    if options.virt_text_pos == 'overlay' and options.virt_text[1][2] == 'GitExtAddPrefix' then
+      options = vim.tbl_extend('force', {}, options, { virt_text = { { options.virt_text[1][1], 'GitExtCode' } } })
+    end
+  end
   local key = table.concat({ row, col, options.end_row or '', options.end_col or '', options.hl_group or '',
     options.priority or '', options.hl_eol and 1 or 0, options.virt_text_pos or '',
     options.virt_text_pos == 'eol' and 'loading' or options.virt_text and vim.mpack.encode(options.virt_text) or '' }, '\0')
@@ -802,7 +819,8 @@ function Highlighter.apply_background(bufnr, ns, hunk)
     local prefix = line:sub(1, 1)
     local buf_line = hunk.start_line + i - 1
 
-    if M.config.word_diff_style == 'treesitter' and (hunk.lang or not hunk.ft) and #line > 1 then
+    if #line > 1 and (M.config.word_diff_style == 'treesitter' and (hunk.lang or not hunk.ft)
+      or hunk.new_file and not M.config.highlight_new_files) then
       Highlighter.set_mark(bufnr, ns, buf_line, 1, {
         end_col = #line, hl_group = 'GitExtCode', priority = PRIORITY_SYNTAX,
       })
@@ -1042,7 +1060,8 @@ function Highlighter.process_hunk(bufnr, ns, hunk, cached, query)
   cached.marks, cached.mark_map = cached.marks or {}, cached.mark_map or {}
   cached.mark_generation = (cached.mark_generation or 0) + 1
   recording[bufnr] = cached
-  if cached.background_style == M.config.word_diff_style then
+  local background_style = M.config.word_diff_style .. ':' .. tostring(M.config.highlight_new_files)
+  if cached.background_style == background_style then
     for _, mark in ipairs(cached.marks) do
       local options = mark.opts
       if options.hl_group == 'GitExtCode' or options.virt_text_pos == 'overlay'
@@ -1050,7 +1069,7 @@ function Highlighter.process_hunk(bufnr, ns, hunk, cached, query)
     end
   else
     Highlighter.apply_background(bufnr, ns, hunk)
-    cached.background_style = M.config.word_diff_style
+    cached.background_style = background_style
   end
   if not cached.layout then
     local layout = { code = { old = {}, new = {} }, colors = { old = {}, new = {} }, groups = {} }
@@ -1287,6 +1306,19 @@ function M.toggle_changed_fg()
   return M.config.changed_fg
 end
 
+function M.set_highlight_new_files(enabled)
+  assert(type(enabled) == 'boolean', 'highlight_new_files must be a boolean')
+  if M.config.highlight_new_files ~= enabled then
+    M.config.highlight_new_files = enabled
+    M.refresh_all()
+  end
+  return enabled
+end
+
+function M.toggle_new_file_highlight()
+  return M.set_highlight_new_files(not M.config.highlight_new_files)
+end
+
 local function source_key(spec, hunk)
   return spec and vim.mpack.encode({ highlight_sources.key(spec), hunk.old_start, hunk.new_start }) or nil
 end
@@ -1393,7 +1425,8 @@ function M.attach(bufnr, opts)
     vim.api.nvim_buf_call(bufnr, function()
       local tick = vim.api.nvim_buf_get_changedtick(bufnr)
       local first_line = opts and opts.first_line and opts.first_line()
-      local settings = M.config.word_diff_style .. '\0' .. (M.config.changed_fg or 'syntax') .. '\0' .. vim.o.diffopt
+      local settings = M.config.word_diff_style .. '\0' .. (M.config.changed_fg or 'syntax')
+        .. '\0' .. tostring(M.config.highlight_new_files) .. '\0' .. vim.o.diffopt
       local queries = {}
       local function current_query(lang)
         if not lang then return nil end
@@ -1485,7 +1518,7 @@ function M.attach(bufnr, opts)
       local hunks = parsed_hunks
       local retained, occurrences = {}, {}
       for _, hunk in ipairs(hunks) do
-        local content = vim.mpack.encode({ hunk.filename or '', hunk.lang or '', hunk.ft or '', hunk.lines })
+        local content = vim.mpack.encode({ hunk.filename or '', hunk.lang or '', hunk.ft or '', hunk.new_file == true, hunk.lines })
         occurrences[content] = (occurrences[content] or 0) + 1
         hunk.cache_key = content .. '\0' .. occurrences[content]
         retained[hunk.cache_key] = hunk_cache[hunk.cache_key] or {}

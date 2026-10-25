@@ -60,6 +60,7 @@ function M.open(o, vertical)
     if empty[i] then
       vim.cmd(command)
       local b = vim.api.nvim_create_buf(false, true); vim.api.nvim_win_set_buf(0, b)
+      vim.b[b].git_diff_missing = true
       vim.bo[b].bufhidden, vim.bo[b].modifiable = 'wipe', false
     else objects.open(target, command, root) end
     vim.cmd('diffthis')

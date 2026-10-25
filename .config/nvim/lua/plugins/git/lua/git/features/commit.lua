@@ -404,6 +404,7 @@ local function show_blob(s, entry, before)
     vim.api.nvim_buf_set_name(b, name)
   end
   vim.b[b].git_blob_base = s.model.base
+  vim.b[b].git_diff_missing = before and entry.status == 'A' or not before and entry.status == 'D'
   vim.b[b].git_blob_base_path = before and path or (entry.old_path or path)
   utils.set_buf_work_tree(b, s.model.root)
   local oid = model_api.git(s.model.root, { 'rev-parse', '--verify', rev .. ':' .. path })

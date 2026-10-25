@@ -886,6 +886,7 @@ local function display_menu()
     choices[#choices + 1] = { key = style:sub(1, 1), label = style, run = function() syntax.set_word_diff_style(style) end }
   end
   choices[1].key = 'l'
+  choices[#choices + 1] = { key = 'n', label = 'Toggle new-file diff colors', run = syntax.toggle_new_file_highlight }
   return require('git.features.transient_menu').show({ kind = 'pr-display', title = 'PR diff display',
     groups = { { title = 'Word diff', actions = choices } } })
 end
