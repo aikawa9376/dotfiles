@@ -23,7 +23,7 @@ local pull_request_branch_by_buf = {}
 local commit_scope_by_buf = {}
 local scope_state_by_buf = {}
 local unpushed_commits_by_buf = {}
-local status_cursor_anchor_by_buf = {}
+local status_cursor = { anchors = {}, lines = {} }
 local pending_status_cursor_anchors_by_buf = {}
 local repository_health_by_buf = {}
 local index_flags_by_buf = {}
@@ -230,24 +230,8 @@ end
 
 local change_section_order = { 'conflicted', 'untracked', 'unstaged', 'staged' }
 
-local function status_file_position(bufnr, row)
-  local entry = status_renderer.entry_at(bufnr, row)
-  if not entry or entry.header then return nil end
-  local direct_row = status_renderer.entry_row(bufnr, row) or row
-  local ordinal = 0
-  local seen = {}
-  for candidate = 1, direct_row do
-    local item = status_renderer.entry_at(bufnr, candidate)
-    if item and not item.header and not seen[item] then
-      seen[item] = true
-      if item.section == entry.section then ordinal = ordinal + 1 end
-    end
-  end
-  return entry, direct_row, ordinal
-end
-
 local function set_status_file_anchor(anchor, bufnr, row, preferred_section, lines)
-  local entry, direct_row, ordinal = status_file_position(bufnr, row)
+  local entry, direct_row, ordinal = status_renderer.entry_position(bufnr, row)
   if not entry then return false end
   anchor.key_type = 'status_entry'
   anchor.key = entry.path
@@ -267,7 +251,13 @@ local function capture_status_cursor(bufnr, winid)
   end
 
   local cursor = vim.api.nvim_win_get_cursor(winid)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+  local cached = status_cursor.lines[bufnr]
+  if not cached or cached.tick ~= tick then
+    cached = { tick = tick, lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false) }
+    status_cursor.lines[bufnr] = cached
+  end
+  local lines = cached.lines
   local key_type, key = status_cursor_key(lines, cursor[1], bufnr)
   local view = vim.w[winid].git_preserve_split_view
   if view then view = vim.deepcopy(view) end
@@ -300,12 +290,12 @@ local function capture_status_cursors(bufnr)
       if anchor then table.insert(anchors, anchor) end
     end
   end
-  if #anchors > 0 then status_cursor_anchor_by_buf[bufnr] = anchors[1] end
+  if #anchors > 0 then status_cursor.anchors[bufnr] = anchors[1] end
   return anchors
 end
 
 local function capture_status_cursors_before_reload(bufnr)
-  local saved_anchor = status_cursor_anchor_by_buf[bufnr]
+  local saved_anchor = status_cursor.anchors[bufnr]
   local anchors = capture_status_cursors(bufnr)
   if not saved_anchor then return anchors end
 
@@ -435,7 +425,7 @@ local function restore_status_cursor(bufnr, anchor, target_win)
   end)
   if winid == vim.api.nvim_get_current_win() then
     local updated = capture_status_cursor(bufnr, winid)
-    if updated then status_cursor_anchor_by_buf[bufnr] = updated end
+    if updated then status_cursor.anchors[bufnr] = updated end
   end
 end
 
@@ -1472,12 +1462,13 @@ function M.setup(group)
           commit_scope_by_buf[b] = nil
           scope_state_by_buf[b] = nil
           unpushed_commits_by_buf[b] = nil
-          status_cursor_anchor_by_buf[b] = nil
+          status_cursor.anchors[b] = nil
           pending_status_cursor_anchors_by_buf[b] = nil
           repository_health_by_buf[b] = nil
           index_flags_by_buf[b] = nil
           index_flag_diffs_by_buf[b] = nil
           status_snapshot_by_buf[b] = nil
+          status_cursor.lines[b] = nil
           status_modules.cleanup(b)
           require('git.features.loading').cleanup(b)
           status_folds.cleanup(b)
@@ -1491,7 +1482,7 @@ function M.setup(group)
         buffer = b,
         callback = function()
           local anchor = capture_status_cursor(b, vim.api.nvim_get_current_win())
-          if anchor then status_cursor_anchor_by_buf[b] = anchor end
+          if anchor then status_cursor.anchors[b] = anchor end
         end,
       })
 
@@ -1501,10 +1492,10 @@ function M.setup(group)
         callback = function()
           if not status_renderer.is_owned(b) then return end
           local winid = vim.api.nvim_get_current_win()
-          local anchor = status_cursor_anchor_by_buf[b]
+          local anchor = status_cursor.anchors[b]
           if anchor then
             vim.schedule(function()
-              if is_live() then restore_status_cursor(b, status_cursor_anchor_by_buf[b] or anchor, winid) end
+              if is_live() then restore_status_cursor(b, status_cursor.anchors[b] or anchor, winid) end
             end)
           end
         end,
@@ -3404,7 +3395,7 @@ function M.focus_section(bufnr, section, opts)
         end
         pcall(vim.api.nvim_win_set_cursor, winid, { target, 0 })
         local anchor = capture_status_cursor(bufnr, winid)
-        if anchor then status_cursor_anchor_by_buf[bufnr] = anchor end
+        if anchor then status_cursor.anchors[bufnr] = anchor end
         return true
       end
     end
@@ -3472,7 +3463,7 @@ function M.restore_navigation(buf, anchor)
     local text = lines[row] or ''
     vim.api.nvim_win_call(win, function() vim.cmd('silent! ' .. row .. 'foldopen!') end)
     vim.api.nvim_win_set_cursor(win, { row, math.min(anchor.col or 0, #text) })
-    status_cursor_anchor_by_buf[buf] = capture_status_cursor(buf, win)
+    status_cursor.anchors[buf] = capture_status_cursor(buf, win)
   end
   return true
 end

@@ -50,7 +50,8 @@ local function mappings(value)
 end
 local function mask_native(side, restore)
   if not api.nvim_win_is_valid(side.win) then return end
-  local mapped = mappings(vim.wo[side.win].winhighlight)
+  local original = vim.wo[side.win].winhighlight
+  local mapped = mappings(original)
   if not restore then
     side.saved = side.saved or {}
     for key in pairs(neutral) do
@@ -65,7 +66,8 @@ local function mask_native(side, restore)
   local items = {}
   for key, target in pairs(mapped) do items[#items + 1] = key .. ':' .. target end
   table.sort(items)
-  vim.wo[side.win].winhighlight = table.concat(items, ',')
+  local value = table.concat(items, ',')
+  if value ~= original then vim.wo[side.win].winhighlight = value end
 end
 local function close(s)
   if not s.active then return end
@@ -156,32 +158,36 @@ refresh = function(s)
     return
   end
   local changed = s.old.tick ~= old_tick or s.new.tick ~= new_tick
+  local alignment_changed = changed or s.opts ~= opts
+  local old_changed, new_changed = s.old.tick ~= old_tick, s.new.tick ~= new_tick
   if s.parsing then s.sources = nil end
   s.revision, s.style, s.opts, s.fg = s.revision + 1, style, opts, fg
   s.highlight_new_files, s.new_file = highlight_new_files, new_file
   s.old.tick, s.new.tick = old_tick, new_tick
   if changed then
     s.sources = nil
-    for _, side in ipairs({ 'old', 'new' }) do s[side].lines = api.nvim_buf_get_lines(s[side].buf, 0, -1, false) end
-    s.blocks = nil
+    if old_changed then s.old.lines = api.nvim_buf_get_lines(s.old.buf, 0, -1, false) end
+    if new_changed then s.new.lines = api.nvim_buf_get_lines(s.new.buf, 0, -1, false) end
   end
+  if alignment_changed then s.blocks, s.changed = nil, nil end
   s.plan, s.pending, s.parsing = { old = {}, new = {} }, true, false
   local revision = s.revision
   jobs.run(function(checkpoint)
+    if s.blocks then return { blocks = s.blocks, changed = s.changed } end
     local diff_opts = syntax.diff_opts()
     diff_opts.result_type = 'indices'
     local blocks = vim.diff(table.concat(s.old.lines, '\n') .. '\n', table.concat(s.new.lines, '\n') .. '\n', diff_opts)
-    s.changed = { old = {}, new = {} }
+    local changed_rows = { old = {}, new = {} }
     for _, block in ipairs(blocks) do
       for _, side in ipairs({ { 'old', 1 }, { 'new', 3 } }) do
-        for row = block[side[2]], block[side[2]] + block[side[2] + 1] - 1 do s.changed[side[1]][row - 1] = true end
+        for row = block[side[2]], block[side[2]] + block[side[2] + 1] - 1 do changed_rows[side[1]][row - 1] = true end
       end
       checkpoint()
     end
-    s.blocks = blocks
-    return true
+    return { blocks = blocks, changed = changed_rows }
   end, function() return current(s, revision) end, function(done, err)
     if not done then if err ~= 'cancelled' then close(s); vim.notify('Split diff: ' .. tostring(err), vim.log.levels.WARN) end; return end
+    s.blocks, s.changed = done.blocks, done.changed
     if #s.blocks == 0 then publish(s, revision, { old = {}, new = {} }); return end
     if s.new_file and not s.highlight_new_files then
       publish(s, revision, { old = {}, new = {} }); return

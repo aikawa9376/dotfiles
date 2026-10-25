@@ -150,8 +150,8 @@ function M.signature(work_tree, git_dir, head_oid)
   return 'none', git_dir
 end
 
-function M.inspect(work_tree)
-  local git_dir = utils.get_git_dir(work_tree)
+function M.inspect(work_tree, git_dir)
+  git_dir = git_dir or utils.get_git_dir(work_tree)
   if not git_dir then return nil end
 
   local bisect = inspect_bisect(work_tree, git_dir)

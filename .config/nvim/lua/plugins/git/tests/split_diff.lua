@@ -8,10 +8,17 @@ local structural = require('git.features.syntax_word_diff')
 local split = require('git.features.split_diff')
 local native = require('git.features.syntax_native')
 if native.command() then native.config.min_nodes = 0 end
-local parses, compares = 0, 0
+local parses, compares, alignments = 0, 0, 0
 local parser, compare = vim.treesitter.get_string_parser, structural.compare
 vim.treesitter.get_string_parser = function(...) parses = parses + 1; return parser(...) end
 structural.compare = function(...) compares = compares + 1; return compare(...) end
+local diff = vim.diff
+vim.diff = function(old, new, opts)
+  if opts and opts.result_type == 'indices' and old:match('^function calculate') and new:match('^function calculate') then
+    alignments = alignments + 1
+  end
+  return diff(old, new, opts)
+end
 local before = { 'function calculate(value)', '  return value + 1', 'end' }
 local after = { 'function calculate(value, extra)', '  return value + 1', 'end' }
 local function buffer(name, lines, ft)
@@ -40,6 +47,7 @@ ready()
 assert(session.sources.old and session.sources.new, 'complete source trees missing')
 local count = compares
 local saved_parses = parses
+local saved_alignments = alignments
 local row = session.plan.new[0]
 assert(row and #row > 0 and not session.plan.old[0], 'inserted argument should only paint new tokens')
 for _, mark in ipairs(row) do
@@ -75,11 +83,29 @@ for _, mark in ipairs(session.plan.new[0]) do novel = novel or mark.options.hl_g
 assert(novel, 'split ignored optional native foregrounds')
 syntax.toggle_changed_fg(); ready()
 assert(compares == count, 'foreground toggle repeated search')
+print(('Split diff: full-file alignments initial=%d, after style/foreground changes=%d'):format(saved_alignments, alignments))
+assert(alignments == saved_alignments, 'Display-only changes repeated full-file alignment')
 -- Source edits invalidate results even before TextChanged has been delivered.
+local get_lines, reads = vim.api.nvim_buf_get_lines, { old = 0, new = 0 }
+vim.api.nvim_buf_get_lines = function(buf, first, last, ...)
+  if first == 0 and last == -1 then
+    if buf == left then reads.old = reads.old + 1 elseif buf == right then reads.new = reads.new + 1 end
+  end
+  return get_lines(buf, first, last, ...)
+end
 vim.api.nvim_buf_set_lines(right, 0, 1, false, { 'function calculate(value, other)' })
 split.refresh_for(right); ready()
+vim.api.nvim_buf_get_lines = get_lines
+assert(reads.old == 0 and reads.new == 1, 'A one-sided edit reread unchanged source buffers')
+assert(alignments == saved_alignments + 1, 'Source edits did not rebuild alignment exactly once')
 assert(compares == count + 1, 'source edit reused stale graph')
 assert(session.plan.new[0][1].col >= 24, 'source edit lost coordinate projection')
+-- Alignment options remain part of the key even when source ticks are unchanged.
+local old_opts = vim.o.diffopt
+vim.o.diffopt = old_opts .. ',iwhiteall'
+split.refresh_for(right); ready()
+assert(alignments == saved_alignments + 2, 'diffopt changes reused stale alignment')
+vim.o.diffopt = old_opts; split.refresh_for(right); ready()
 -- A second pair does not recompute the resident first pair.
 local old2 = buffer('git-diff://test2/before/other.lua', { 'return "old"' })
 local new2 = buffer('git-diff://test2/after/other.lua', { 'return "new"' })

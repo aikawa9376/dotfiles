@@ -2007,7 +2007,19 @@ history scope/focus/rename following against behaviors verified with Fugitive.
   changed headings keep their row anchors through in-line text updates. Section
   context is collected in one forward pass instead of rescanning preceding rows.
   The renderer caches entry-to-row lookup within each model and invalidates it
-  when a warning or inline diff shifts entries.
+  when a warning or inline diff shifts entries. That index also supplies file
+  ordinals for cursor restoration; cursor capture reuses buffer text only while
+  its changedtick is unchanged, avoiding full scans on each cursor move.
+- `split_diff.lua`: native line alignment is retained across display-style and
+  foreground changes. Source edits or `diffopt` changes invalidate it; one-sided
+  edits reread only that side. Word comparisons and native window alignment keep
+  their existing semantics.
+- `blame.lua`: message and commit-info floats retain unchanged buffer contents
+  while still updating position, wrapping and size. Text edits, PR completion,
+  revision changes and recreated floats repaint normally.
+- `operation.lua`: Status passes the directory already resolved by its operation
+  signature into inspection, avoiding a duplicate Git-directory subprocess.
+  Operation/progress markers are still revalidated on each snapshot.
 - `index_flags.lua`: reads flags and stage-zero metadata in one binary-safe
   `ls-files -v --stage -z` pass, parsing metadata only for flagged records.
 - `status_statistics.lua`: tracked diff statistics and per-view untracked line-count caches.
@@ -2035,6 +2047,9 @@ history scope/focus/rename following against behaviors verified with Fugitive.
 Run all standalone Lua and TUI checks from this directory with
 `python3 tests/run.py -j 3`, or select checks by stem, for example
 `python3 tests/run.py status_statistics_cache highlight_lifecycle`.
+`status_cursor_perf`, `operation_snapshot_perf`, `split_diff`, `blame_layout`
+and `blame_pr_preview` also check bounded calls and unchanged-content writes,
+alongside cursor, diff-option, editing, PR and window-lifetime behavior.
 The runner isolates each check's state/cache directories, retains installed
 plugins/parsers, handles the layout check's normal-startup requirement, and
 returns a failure status for test errors/timeouts. Editor bridge checks need

@@ -632,7 +632,7 @@ local function snapshot_from_model(bufnr, model, opts)
   then
     operation_lines = cached_operation.lines
   elseif not opts.fast then
-    operation_lines = operation.status_lines(operation.inspect(model.work_tree))
+    operation_lines = operation.status_lines(operation.inspect(model.work_tree, resolved_git_dir))
     operation_cache_by_buf[bufnr] = {
       work_tree = model.work_tree,
       git_dir = resolved_git_dir,
@@ -660,6 +660,7 @@ local function snapshot_from_model(bufnr, model, opts)
   append_section(lines, entries_by_row, model, 'Unstaged changes', 'unstaged', model.unstaged)
   append_section(lines, entries_by_row, model, 'Staged changes', 'staged', model.staged)
   model.entries_by_row = entries_by_row
+  model.rows_by_entry = nil
   models[bufnr] = model
   M.take_ownership(bufnr)
   return lines
@@ -836,6 +837,17 @@ local function direct_row_for_entry(model, entry)
       if not rows[value] or candidate < rows[value] then rows[value] = candidate end
     end
     model.rows_by_entry = rows
+    local ordered, counts, ordinals = {}, {}, {}
+    for item, direct in pairs(rows) do
+      if not item.header then ordered[#ordered + 1] = { entry = item, row = direct } end
+    end
+    table.sort(ordered, function(a, b) return a.row < b.row end)
+    for _, item in ipairs(ordered) do
+      local section = item.entry.section
+      counts[section] = (counts[section] or 0) + 1
+      ordinals[item.entry] = counts[section]
+    end
+    model.ordinals_by_entry = ordinals
   end
   return model.rows_by_entry[entry]
 end
@@ -845,6 +857,14 @@ function M.entry_row(bufnr, row)
   local entry = M.entry_at(bufnr, row)
   if not model or not entry then return nil end
   return direct_row_for_entry(model, entry)
+end
+
+function M.entry_position(bufnr, row)
+  local model = models[bufnr]
+  local entry = M.entry_at(bufnr, row)
+  if not model or not entry or entry.header then return nil end
+  local direct = direct_row_for_entry(model, entry)
+  return entry, direct, model.ordinals_by_entry[entry]
 end
 
 function M.paths_in_range(bufnr, first_row, last_row)

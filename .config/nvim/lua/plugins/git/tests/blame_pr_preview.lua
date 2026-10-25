@@ -84,6 +84,7 @@ fitted(expanded)
 -- generate another WinResized event and keep triggering layout work.
 assert(expanded.config.height > vim.api.nvim_buf_line_count(expanded.buf), 'Fixture must exercise wrapping')
 local set_config = vim.api.nvim_win_set_config
+local preview_tick = vim.api.nvim_buf_get_changedtick(expanded.buf)
 local resized = {}
 vim.api.nvim_win_set_config = function(win, config)
   if win == expanded.win and config.height then resized[#resized + 1] = config.height end
@@ -94,10 +95,12 @@ vim.wait(40, function() return false end, 10)
 vim.api.nvim_win_set_config = set_config
 assert(#resized > 0)
 for _, height in ipairs(resized) do assert(height == expanded.config.height, 'Stable preview resized during layout') end
+assert(vim.api.nvim_buf_get_changedtick(expanded.buf) == preview_tick, 'Scrolling rewrote unchanged preview content')
 -- Same-commit movement reuses results and follows the new code-row anchor.
 move(panel, 3)
 wait(function() return preview().config.bufpos[1] == 2 end, 'same commit follows row')
 assert(#requests == 1 and preview().text == expanded.text)
+assert(vim.api.nvim_buf_get_changedtick(expanded.buf) == preview_tick, 'Moving within the same commit rewrote the preview')
 -- Both panes use attribution; leaving a commit detaches only this subscriber.
 move(code, 2)
 local second = requested(2)

@@ -56,6 +56,20 @@ assert(vim.wait(500, function() return vim.wo[panel].winbar:find(hash:sub(1, 8),
 vim.api.nvim_win_call(code, function() vim.fn.winrestview({ lnum = 180, topline = 170, col = 5 }) end)
 assert_aligned(180)
 assert(not vim.wo[panel].cursorbind and not vim.wo[code].cursorbind, 'duplicate native cursor synchronization')
+-- Pinned metadata is layout-only work while its content/revision is unchanged.
+vim.api.nvim_set_current_win(panel)
+vim.fn.maparg('C', 'n', false, true).callback()
+local info
+for _, win in ipairs(vim.api.nvim_list_wins()) do
+  if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'gitblameinfo' then info = vim.api.nvim_win_get_buf(win) end
+end
+assert(info, 'Commit info float did not open')
+local tick = vim.api.nvim_buf_get_changedtick(info)
+for _ = 1, 3 do
+  vim.api.nvim_exec_autocmds('WinScrolled', { pattern = tostring(panel) })
+  vim.wait(30, function() return false end, 10)
+end
+assert(vim.api.nvim_buf_get_changedtick(info) == tick, 'Layout events rewrote unchanged commit metadata')
 vim.fn.maparg('q', 'n', false, true).callback()
 for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
 vim.fn.delete(root, 'rf')

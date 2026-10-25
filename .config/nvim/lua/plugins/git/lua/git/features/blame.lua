@@ -223,7 +223,21 @@ local preview_pr_ns = vim.api.nvim_create_namespace('git_blame_preview_pr')
 local function valid(win) return win and vim.api.nvim_win_is_valid(win) end
 local function tell(message) vim.notify(message, vim.log.levels.INFO) end
 local function local_options(win, opts)
-  for name, value in pairs(opts) do vim.api.nvim_set_option_value(name, value, { win = win, scope = 'local' }) end
+  for name, value in pairs(opts) do
+    if vim.api.nvim_get_option_value(name, { win = win, scope = 'local' }) ~= value then
+      vim.api.nvim_set_option_value(name, value, { win = win, scope = 'local' })
+    end
+  end
+end
+local function float_content(s, key, buf, lines)
+  local cached = s[key]
+  if cached and cached.buf == buf and cached.tick == vim.api.nvim_buf_get_changedtick(buf)
+    and vim.deep_equal(cached.lines, lines) then return false end
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  s[key] = { buf = buf, tick = vim.api.nvim_buf_get_changedtick(buf), lines = lines }
+  return true
 end
 local function view(win)
   return vim.api.nvim_win_call(win, vim.fn.winsaveview)
@@ -326,6 +340,7 @@ local function preview(s)
     local b = vim.api.nvim_create_buf(false, true)
     vim.bo[b].bufhidden = 'wipe'
     s.float_win = vim.api.nvim_open_win(b, false, config)
+    s.float_content = nil
     local win = s.float_win
     vim.api.nvim_create_autocmd('BufWipeout', { group = s.group, buffer = b, once = true, callback = function()
       if s.float_win == win then
@@ -341,18 +356,20 @@ local function preview(s)
     vim.api.nvim_win_set_config(s.float_win, config)
   end
   local b = vim.api.nvim_win_get_buf(s.float_win)
-  vim.bo[b].modifiable = true
-  vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
-  vim.bo[b].modifiable = false
-  vim.bo[b].filetype = s.preview == 'message' and 'gitcommit' or 'diff'
-  vim.api.nvim_buf_clear_namespace(b, preview_pr_ns, 0, -1)
-  for index, line in ipairs(prs or {}) do
-    if line:match('^#%d+ ') then
-      -- PR numbers start with #, which gitcommit syntax treats as comments.
-      vim.api.nvim_buf_set_extmark(b, preview_pr_ns, #lines - #prs + index - 1, 0, {
-        end_col = #line, hl_group = 'Normal', priority = 200,
-      })
+  local changed = float_content(s, 'float_content', b, lines)
+  local ft = message and 'gitcommit' or 'diff'
+  if vim.bo[b].filetype ~= ft then vim.bo[b].filetype = ft end
+  if changed or not vim.deep_equal(s.float_prs, prs) then
+    vim.api.nvim_buf_clear_namespace(b, preview_pr_ns, 0, -1)
+    for index, line in ipairs(prs or {}) do
+      if line:match('^#%d+ ') then
+        -- PR numbers start with #, which gitcommit syntax treats as comments.
+        vim.api.nvim_buf_set_extmark(b, preview_pr_ns, #lines - #prs + index - 1, 0, {
+          end_col = #line, hl_group = 'Normal', priority = 200,
+        })
+      end
     end
+    s.float_prs = prs
   end
   local_options(s.float_win, { wrap = s.preview == 'message', list = false, spell = false })
   if s.preview == 'message' and vim.diagnostic and vim.diagnostic.enable then
@@ -417,11 +434,10 @@ local function history_info(s, refresh)
     local b = vim.api.nvim_create_buf(false, true)
     vim.bo[b].bufhidden = 'wipe'
     s.info_win = vim.api.nvim_open_win(b, false, config)
+    s.info_content = nil
   else vim.api.nvim_win_set_config(s.info_win, config) end
   local b = vim.api.nvim_win_get_buf(s.info_win)
-  vim.bo[b].modifiable = true
-  vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
-  vim.bo[b].modifiable = false
+  float_content(s, 'info_content', b, lines)
   if vim.bo[b].filetype ~= 'gitblameinfo' then
     vim.bo[b].filetype = 'gitblameinfo'
     vim.bo[b].syntax = 'git'
