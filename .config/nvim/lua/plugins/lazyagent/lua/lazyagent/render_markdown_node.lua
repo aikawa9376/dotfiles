@@ -1,6 +1,9 @@
 local Node = require("render-markdown.lib.node")
 local Bounded = setmetatable({}, { __index = Node })
 Bounded.__index = Bounded
+-- Lua resolves comparison metamethods directly on the instance's metatable.
+-- Table renderers sort these nodes; __index inheritance alone is insufficient.
+Bounded.__lt = Node.__lt
 
 -- Only nodes created by LazyAgent's custom handler use this adapter. Keep the
 -- installed renderer and ordinary Markdown nodes unchanged.

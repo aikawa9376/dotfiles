@@ -60,6 +60,33 @@ local expected_marks = Marks.new(expected_context, false)
 List:execute(expected_context, expected_marks, Bounded.wrap(valid_node))
 assert(vim.deep_equal(marks, expected_marks:get()), "empty captures add no marks or duplicate healthy ones")
 
+-- Table parsing sorts row, pipe and cell nodes. The bounded wrapper must keep
+-- the native node ordering metamethod, not only ordinary methods via __index.
+vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+  "| Name | Value |", "| --- | --- |", "| first | one |", "| second | two |",
+})
+local table_tree = parser:parse(true)[1]
+local table_query = vim.treesitter.query.parse("markdown", "(pipe_table) @table")
+local Table = require("render-markdown.render.markdown.table")
+local tables = 0
+for _, ts_node in table_query:iter_captures(table_tree:root(), buf) do
+  local function render(bounded)
+    local table_context = Context.new(buf, vim.api.nvim_get_current_win(), state.get(buf))
+    local table_marks = Marks.new(table_context, false)
+    local node = Node.new(buf, ts_node)
+    if bounded then node = Bounded.wrap(node) end
+    Table:execute(table_context, table_marks, node)
+    return table_marks:get()
+  end
+  local native = render(false)
+  assert(#native > 0, "native table fixture produces marks")
+  assert(vim.deep_equal(render(true), native), "bounded table marks match upstream")
+  tables = tables + 1
+end
+assert(tables == 1, "the real Markdown parser recognizes the table")
+Context.new(buf, vim.api.nvim_get_current_win(), state.get(buf))
+assert(#adapter.parse({ buf = buf, root = table_tree:root() }) > 0, "custom handler renders tables")
+
 -- Native edits retain collapsed injection trees until the relevant region is
 -- reparsed. Exercise the actual stale TSTree, not a fabricated root range.
 local nested = { "```markdown", "- old one", "- old two", "```", "", "tail" }
@@ -107,4 +134,4 @@ for iteration = 1, 30 do
 end
 view.kill_pane(pane)
 vim.fn.delete(path)
-print("stale Markdown captures, native list appearance, and 30 gC toggles passed")
+print("stale Markdown captures, native list/table appearance, and 30 gC toggles passed")
