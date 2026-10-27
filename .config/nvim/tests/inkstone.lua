@@ -54,6 +54,43 @@ for _, ft in ipairs(spec.ft) do
   assert(ui.cache[buf] == nil and state.cache[buf] == nil, ft .. ': stale cache')
   print('PASS: Inkstone configuration and adapter: ' .. ft)
 end
+-- Right-aligned language labels must stay visible even when a body line wraps.
+vim.cmd('vsplit')
+vim.api.nvim_win_set_width(0, 60)
+local restore_buf = vim.api.nvim_get_current_buf()
+for _, ft in ipairs({ 'lazyagent', 'lazyagent_acp' }) do
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.bo[buf].filetype = ft
+  local source_lines = {
+    '```lua', 'local value = 1', '```', '',
+    '```python', 'print("' .. string.rep('x', 160) .. '")', '```', '',
+  }
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, source_lines)
+  renderer.render({ buf = buf })
+  assert(vim.wait(3000, function() return ui.cache[buf] and ui.cache[buf].n > 0 end), ft .. ': no code render')
+  local width = require('inkstone.lib.env').win.width(vim.api.nvim_get_current_win())
+  local labels = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ui.ns, 0, -1, { details = true })) do
+    local opts = mark[4]
+    if opts.virt_text_pos == 'overlay' and opts.virt_text then
+      local text = ''
+      for _, chunk in ipairs(opts.virt_text) do text = text .. chunk[1] end
+      for _, language in ipairs({ 'lua', 'python' }) do
+        if text:find(language, 1, true) then
+          assert(vim.fn.strdisplaywidth(text) <= width, ft .. ': ' .. language .. ' is outside the window')
+          labels[language] = true
+        end
+      end
+    end
+  end
+  assert(labels.lua and labels.python, ft .. ': missing language label')
+  assert(vim.deep_equal(vim.api.nvim_buf_get_lines(buf, 0, -1, false), source_lines), ft .. ': code source changed')
+  vim.api.nvim_win_set_buf(0, restore_buf)
+  vim.api.nvim_buf_delete(buf, { force = true })
+  print('PASS: visible Lua/Python labels for short and wrapped code: ' .. ft)
+end
+vim.cmd('close')
 for name in pairs(package.loaded) do
   assert(not name:match('^render%-markdown'), 'Loaded old renderer: ' .. name)
 end

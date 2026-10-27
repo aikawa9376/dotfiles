@@ -1,7 +1,22 @@
 local markdown_renderer = require("lazyagent.markdown_renderer")
 local Code = markdown_renderer.require("render.markdown.code")
--- Inkstone owns viewport bounds, width caching and its padding implementation.
-if markdown_renderer.name() == "inkstone" then return Code end
+if markdown_renderer.name() == "inkstone" then
+  local env = markdown_renderer.require("lib.env")
+  local Render = setmetatable({}, { __index = Code })
+  Render.__index = Render
+
+  function Render:language(delim)
+    -- A long body can put the right-aligned language beyond the window.
+    -- Bound only the header; Inkstone still owns body widths and decoration.
+    local body = self.data.body
+    self.data.body = math.min(body, math.max(0, env.win.width(self.context.win) - self.data.margin))
+    local rendered = Code.language(self, delim)
+    self.data.body = body
+    return rendered
+  end
+
+  return Render
+end
 local str = markdown_renderer.require("lib.str")
 local Render = setmetatable({}, { __index = Code })
 Render.__index = Render

@@ -186,7 +186,8 @@ function M.parse(ctx)
 
   local query = ts.parse("markdown", markdown_query)
   local renders = {
-    code = is_lazyagent_acp_buffer(ctx.buf) and require("lazyagent.render_markdown_code")
+    code = (is_lazyagent_acp_buffer(ctx.buf) or markdown_renderer.name() == "inkstone")
+      and require("lazyagent.render_markdown_code")
       or markdown_renderer.require("render.markdown.code"),
     dash = markdown_renderer.require("render.markdown.dash"),
     document = markdown_renderer.require("render.markdown.document"),
