@@ -195,7 +195,7 @@ function M.open(ctx)
     vim.bo[right].filetype, vim.bo[right].syntax = 'gitpatchcollection', 'git'
     require('git.utils').set_buf_work_tree(right, root)
     vim.b[right].git_commit = model.hash
-    vim.wo[right_win].wrap = false
+    vim.api.nvim_set_option_value('wrap', false, { win = right_win, scope = 'local' })
     local s = { root = root, model = model, head = head, left = left, right = right,
       right_win = right_win, tab = tab, origin = origin, selected = {}, tasks = {}, message = { '' } }
     sessions[tab] = s

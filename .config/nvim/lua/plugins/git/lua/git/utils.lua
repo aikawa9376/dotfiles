@@ -524,7 +524,7 @@ end
 ---@param win integer window id
 ---@param bufnr integer buffer number
 function M.setup_flog_window(win, bufnr)
-  vim.wo[win].wrap = false
+  vim.api.nvim_set_option_value('wrap', false, { win = win, scope = 'local' })
   vim.wo[win].number = false
   vim.wo[win].relativenumber = false
   vim.wo[win].signcolumn = 'no'

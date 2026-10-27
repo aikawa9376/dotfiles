@@ -21,7 +21,7 @@ return {
     },
     hooks = {
       diff_buf_win_enter = function(bufnr, winid, ctx)
-        vim.wo[winid].wrap = false
+        vim.api.nvim_set_option_value('wrap', false, { win = winid, scope = 'local' })
         vim.w[winid].git_split_side = { buf = bufnr, symbol = ctx.symbol, layout = ctx.layout_name }
         require('git.features.split_diff').setup()
       end,

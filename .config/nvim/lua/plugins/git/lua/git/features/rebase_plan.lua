@@ -261,7 +261,8 @@ function M.open(ctx)
     vim.bo[buf].filetype, vim.bo[buf].syntax = 'gitrebaseplan', 'gitrebase'
     utils.set_buf_work_tree(buf, root)
     utils.open_panel_split(); vim.api.nvim_win_set_buf(0, buf)
-    vim.wo.wrap, vim.wo.cursorline = false, true
+    vim.api.nvim_set_option_value('wrap', false, { win = 0, scope = 'local' })
+    vim.wo.cursorline = true
     render(state); remember(state); paint(state); vim.bo[buf].modified = false
     vim.api.nvim_win_set_cursor(0, { 7, 0 })
     todo.attach(buf, { plan = true, show_message = function() M.message(buf) end })

@@ -694,7 +694,7 @@ local function blob(s, entry, before, coordinate)
   utils.set_buf_work_tree(b, s.model.root)
   vim.api.nvim_win_set_buf(0, b)
   vim.bo[b].filetype = vim.filetype.match({ filename = path }) or ''
-  vim.wo.wrap = false
+  vim.api.nvim_set_option_value('wrap', false, { win = 0, scope = 'local' })
   if coordinate then
     local line = before and coordinate.left or nil
     if not before then line = coordinate.right end

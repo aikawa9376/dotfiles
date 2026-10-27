@@ -107,7 +107,7 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
       title_pos = 'center',
     })
 
-    vim.api.nvim_set_option_value('wrap', false, { win = float_win })
+    vim.api.nvim_set_option_value('wrap', false, { win = float_win, scope = 'local' })
     vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
   end
 
@@ -132,7 +132,7 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
     end
   end
 
-  vim.api.nvim_set_option_value('wrap', false, { win = float_win })
+  vim.api.nvim_set_option_value('wrap', false, { win = float_win, scope = 'local' })
   vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
 end
 

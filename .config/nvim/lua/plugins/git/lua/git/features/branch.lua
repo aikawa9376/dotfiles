@@ -1231,7 +1231,7 @@ local function open_branch_list(opts)
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
-  vim.wo[vim.api.nvim_get_current_win()].wrap = false
+  vim.api.nvim_set_option_value('wrap', false, { win = 0, scope = 'local' })
   vim.bo[bufnr].filetype = 'gitbranch'
   vim.bo[bufnr].modifiable = false
   return bufnr

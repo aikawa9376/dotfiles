@@ -271,7 +271,7 @@ function M.show(spec, opts)
   vim.wo[win].foldcolumn = '0'
   vim.wo[win].statuscolumn = ''
   vim.wo[win].list = false
-  vim.wo[win].wrap = false
+  vim.api.nvim_set_option_value('wrap', false, { win = win, scope = 'local' })
   vim.wo[win].cursorline = true
 
   local function close()
