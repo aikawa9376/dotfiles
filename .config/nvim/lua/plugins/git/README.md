@@ -708,14 +708,18 @@ File/diff comments stay in their existing Review threads routes and are not
 copied into Conversation. Each item/body row carries its own browser target for
 `gx`, independently of text that resembles a file or section heading.
 
-With configured `render-markdown.nvim` and the `markdown` / `markdown_inline`
+With configured `inkstone.nvim` or `render-markdown.nvim` and the `markdown` / `markdown_inline`
 parsers available, the editable description and expanded Conversation bodies
 render Markdown headings, links, tables and code blocks. Each body is parsed
 independently, so an unfinished code fence cannot consume the next comment or
 other sections. The title, instructions, author/date rows and diffs retain
 their own presentation. Description edits and folds update the rendering
 without changing stored text, undo or GitHub save content. The usual
-`:RenderMarkdown toggle` applies; without the plugin/parsers, text stays plain.
+`:Inkstone toggle` / `:RenderMarkdown toggle` applies; without the plugin/parsers, text stays plain.
+The integration reuses an initialized renderer, falling back to whichever is
+available. `vim.g.markdown_renderer = 'inkstone'` or `'render-markdown'` chooses
+a preferred renderer when both are installed; an unavailable preference falls
+back automatically. Use the matching custom Markdown handler in its setup.
 The dotfiles renderer configuration adds `gitpr` support and suppresses its
 extra signs to preserve the PR fold gutter.
 

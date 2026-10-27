@@ -1,14 +1,16 @@
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
 package.path = plugin .. '/lua/?.lua;' .. plugin .. '/tests/?.lua;' .. package.path
 local data = vim.fn.stdpath('data')
-vim.opt.rtp:prepend(data .. '/lazy/render-markdown.nvim')
+local namespace = vim.env.GIT_MARKDOWN_RENDERER or 'render-markdown'
+vim.g.markdown_renderer = namespace
+vim.opt.rtp:prepend(vim.env.GIT_MARKDOWN_RTP or (data .. '/lazy/' .. namespace .. '.nvim'))
 vim.opt.rtp:prepend(data .. '/lazy/nvim-treesitter/runtime')
 vim.opt.rtp:prepend(data .. '/site')
-local renderer = require('render-markdown')
-local spec = dofile(plugin .. '/../render_markdown.lua')
+local renderer = require(namespace)
+local spec = dofile(plugin .. (namespace == 'inkstone' and '/../inkstone.lua' or '/../render_markdown.lua'))
 renderer.setup(vim.tbl_deep_extend('force', spec.opts, { debounce = 0, render_modes = true,
   completions = { lsp = { enabled = false }, blink = { enabled = false } } }))
-vim.cmd('runtime plugin/render-markdown.lua')
+vim.cmd('runtime plugin/' .. namespace .. '.lua')
 vim.o.columns, vim.o.lines = 150, 60
 local f = require('helpers.issue_fixture').new()
 f.issue.title = '# Raw title'
@@ -18,7 +20,7 @@ f.comments[2].body = '# Independent comment\n\n[a link](https://example.test)'
 local view, markdown = require('git.features.issue'), require('git.features.pr_markdown')
 local buf = view.open(f.ctx)
 f.wait(function() return view.model(buf) ~= nil end)
-local ns = vim.api.nvim_create_namespace('render-markdown.nvim')
+local ns = vim.api.nvim_create_namespace(namespace .. '.nvim')
 local function settle() renderer.render({ buf = buf }); vim.wait(100, function() return false end, 2) end
 local function bounded(count)
   local ranges = vim.b[buf].git_pr_markdown_ranges
@@ -34,8 +36,9 @@ settle(); assert(markdown.active(buf)); bounded(3)
 local parser = vim.treesitter.get_parser(buf); parser:parse(true)
 assert(vim.tbl_count(parser:trees()) == 3, 'Unclosed comment fence swallowed the next comment')
 local marks = vim.inspect(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
-assert(marks:find('RenderMarkdownH1', 1, true) and marks:find('RenderMarkdownCode', 1, true)
-  and marks:find('RenderMarkdownTable', 1, true) and marks:find('RenderMarkdownLink', 1, true), 'Missing real renderer decorations')
+local prefix = namespace == 'inkstone' and 'Inkstone' or 'RenderMarkdown'
+assert(marks:find(prefix .. 'H1', 1, true) and marks:find(prefix .. 'Code', 1, true)
+  and marks:find(prefix .. 'Table', 1, true) and marks:find(prefix .. 'Link', 1, true), 'Missing real renderer decorations')
 local function row(text)
   for index, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do if line == text then return index end end
   error('Missing ' .. text)

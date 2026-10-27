@@ -1,14 +1,16 @@
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
 package.path = plugin .. '/lua/?.lua;' .. plugin .. '/tests/?.lua;' .. package.path
 local data = vim.fn.stdpath('data')
-vim.opt.rtp:prepend(data .. '/lazy/render-markdown.nvim')
+local namespace = vim.env.GIT_MARKDOWN_RENDERER or 'render-markdown'
+vim.g.markdown_renderer = namespace
+vim.opt.rtp:prepend(vim.env.GIT_MARKDOWN_RTP or (data .. '/lazy/' .. namespace .. '.nvim'))
 vim.opt.rtp:prepend(data .. '/lazy/nvim-treesitter/runtime')
 vim.opt.rtp:prepend(data .. '/site')
-local renderer = require('render-markdown')
-local spec = dofile(plugin .. '/../render_markdown.lua')
+local renderer = require(namespace)
+local spec = dofile(plugin .. (namespace == 'inkstone' and '/../inkstone.lua' or '/../render_markdown.lua'))
 renderer.setup(vim.tbl_deep_extend('force', spec.opts, { debounce = 0, render_modes = true,
   completions = { lsp = { enabled = false }, blink = { enabled = false } } }))
-vim.cmd('runtime plugin/render-markdown.lua')
+vim.cmd('runtime plugin/' .. namespace .. '.lua')
 vim.o.columns, vim.o.lines = 150, 60
 local f = require('helpers.pr_fixture').new()
 local ui = require('helpers.pr_ui').new(f)
@@ -23,7 +25,7 @@ f.discussion = {
   { id = 3, user = { login = 'reviewer' }, created_at = '2026-10-12T01:00:02Z', body = '```lua\nunterminated fence' },
   { id = 4, user = { login = 'reviewer' }, created_at = '2026-10-12T01:00:03Z', body = '# Independent heading' },
 }
-local ns = vim.api.nvim_create_namespace('render-markdown.nvim')
+local ns = vim.api.nvim_create_namespace(namespace .. '.nvim')
 local function marks() return vim.api.nvim_buf_get_extmarks(ui.buf, ns, 0, -1, { details = true }) end
 local function settle() vim.wait(120, function() return false end, 5) end
 local function bounded(count)
@@ -49,12 +51,13 @@ renderer.render({ buf = ui.buf }); settle()
 assert(#marks() > 0, 'The actual renderer did not produce Conversation marks')
 bounded()
 local heading, code, link, table_mark = false, false, false, false
+local prefix = namespace == 'inkstone' and 'Inkstone' or 'RenderMarkdown'
 for _, mark in ipairs(marks()) do
   local opts = vim.inspect(mark[4])
-  heading = heading or opts:find('RenderMarkdownH1', 1, true)
-  code = code or opts:find('RenderMarkdownCode', 1, true)
-  link = link or opts:find('RenderMarkdownLink', 1, true)
-  table_mark = table_mark or opts:find('RenderMarkdownTable', 1, true)
+  heading = heading or opts:find(prefix .. 'H1', 1, true)
+  code = code or opts:find(prefix .. 'Code', 1, true)
+  link = link or opts:find(prefix .. 'Link', 1, true)
+  table_mark = table_mark or opts:find(prefix .. 'Table', 1, true)
 end
 assert(heading and code and link and table_mark, 'Heading/code/link/table rendering is missing')
 assert(vim.bo[ui.buf].syntax == 'git' and not vim.bo[ui.buf].modified)

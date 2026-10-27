@@ -1,11 +1,13 @@
--- Integration contract against installed render-markdown and Markdown/Lua parsers.
+-- Integration contract against either renderer and installed Markdown/Lua parsers.
 local source = debug.getinfo(1, 'S').source:gsub('^@', '')
 local root = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source)))
 vim.opt.rtp:prepend(root)
 vim.opt.rtp:append(assert(vim.env.LAZYAGENT_MARKDOWN_RTP, 'set LAZYAGENT_MARKDOWN_RTP'))
 vim.opt.rtp:append(assert(vim.env.LAZYAGENT_PARSER_RTP, 'set LAZYAGENT_PARSER_RTP'))
+local namespace = vim.env.LAZYAGENT_MARKDOWN_MODULE or 'render-markdown'
+vim.g.markdown_renderer = namespace
 vim.treesitter.language.register('markdown', 'lazyagent_acp')
-require('render-markdown').setup({
+require(namespace).setup({
   file_types = { 'lazyagent_acp' },
   anti_conceal = { enabled = false },
   code = { sign = false, left_pad = 1 },
@@ -15,9 +17,9 @@ require('render-markdown').setup({
     filetype = { lazyagent_acp = { code = { left_pad = 1 }, debounce = 100 } },
   },
 })
-local ui = require('render-markdown.core.ui')
-local manager = require('render-markdown.core.manager')
-local state = require('render-markdown.state')
+local ui = require(namespace .. '.core.ui')
+local manager = require(namespace .. '.core.manager')
+local state = require(namespace .. '.state')
 local Preview = require('lazyagent.acp.transcript_preview')
 local ns = vim.api.nvim_create_namespace('lazyagent_acp_preview')
 local lines = {

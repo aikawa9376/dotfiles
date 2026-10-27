@@ -1,5 +1,8 @@
-local Code = require("render-markdown.render.markdown.code")
-local str = require("render-markdown.lib.str")
+local markdown_renderer = require("lazyagent.markdown_renderer")
+local Code = markdown_renderer.require("render.markdown.code")
+-- Inkstone owns viewport bounds, width caching and its padding implementation.
+if markdown_renderer.name() == "inkstone" then return Code end
+local str = markdown_renderer.require("lib.str")
 local Render = setmetatable({}, { __index = Code })
 Render.__index = Render
 

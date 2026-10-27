@@ -214,7 +214,8 @@ return {
               vim.schedule(function()
                 local win = opts.window:get_win()
                 if win and vim.api.nvim_win_get_buf(win) == buf then
-                  require('render-markdown').render({ buf = buf, win = win })
+                  local renderer = require('config.markdown_renderer').get()
+                  if renderer then renderer.render({ buf = buf, win = win }) end
                 end
               end)
             end,

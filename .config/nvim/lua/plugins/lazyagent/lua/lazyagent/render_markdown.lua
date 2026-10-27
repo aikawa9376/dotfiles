@@ -1,3 +1,4 @@
+local markdown_renderer = require("lazyagent.markdown_renderer")
 local M = {}
 
 local markdown_query = [[
@@ -39,9 +40,11 @@ local function is_lazyagent_acp_buffer(buf)
 end
 
 function M.enable_async_view_parse()
+  -- Inkstone already guards asynchronous parses for every buffer.
+  if markdown_renderer.name() == "inkstone" then return end
   if M.async_view_parse_enabled or vim.fn.has("nvim-0.11") == 0 then return end
-  local View = require("render-markdown.request.view")
-  local Context = require("render-markdown.request.context")
+  local View = markdown_renderer.require("request.view")
+  local Context = markdown_renderer.require("request.context")
   local parse = View.parse
   View.parse = function(self, parser, callback)
     local buf = self.buf
@@ -176,24 +179,24 @@ function M.parse(ctx)
   -- cache. Do not query a collapsed root or hand its empty nodes to renderers.
   local row, col, end_row, end_col = ctx.root:range()
   if end_row < row or (end_row == row and end_col <= col) then return {} end
-  local ts = require("render-markdown.core.ts")
-  local Context = require("render-markdown.request.context")
-  local Marks = require("render-markdown.lib.marks")
+  local ts = markdown_renderer.require("core.ts")
+  local Context = markdown_renderer.require("request.context")
+  local Marks = markdown_renderer.require("lib.marks")
   local Node = require("lazyagent.render_markdown_node")
 
   local query = ts.parse("markdown", markdown_query)
   local renders = {
     code = is_lazyagent_acp_buffer(ctx.buf) and require("lazyagent.render_markdown_code")
-      or require("render-markdown.render.markdown.code"),
-    dash = require("render-markdown.render.markdown.dash"),
-    document = require("render-markdown.render.markdown.document"),
-    footnote = require("render-markdown.render.common.footnote"),
-    heading = require("render-markdown.render.markdown.heading"),
-    list = require("render-markdown.render.markdown.list"),
-    paragraph = require("render-markdown.render.markdown.paragraph"),
-    quote = require("render-markdown.render.markdown.quote"),
-    section = require("render-markdown.render.markdown.section"),
-    table = require("render-markdown.render.markdown.table"),
+      or markdown_renderer.require("render.markdown.code"),
+    dash = markdown_renderer.require("render.markdown.dash"),
+    document = markdown_renderer.require("render.markdown.document"),
+    footnote = markdown_renderer.require("render.common.footnote"),
+    heading = markdown_renderer.require("render.markdown.heading"),
+    list = markdown_renderer.require("render.markdown.list"),
+    paragraph = markdown_renderer.require("render.markdown.paragraph"),
+    quote = markdown_renderer.require("render.markdown.quote"),
+    section = markdown_renderer.require("render.markdown.section"),
+    table = markdown_renderer.require("render.markdown.table"),
   }
 
   local context = Context.get(ctx.buf)

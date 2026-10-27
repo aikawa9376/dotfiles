@@ -5,17 +5,22 @@ vim.opt.rtp:prepend(root)
 vim.opt.rtp:append(assert(vim.env.LAZYAGENT_MARKDOWN_RTP))
 vim.opt.rtp:append(assert(vim.env.LAZYAGENT_PARSER_RTP))
 vim.opt.swapfile = false
-require("render-markdown").setup({
+local namespace = vim.env.LAZYAGENT_MARKDOWN_MODULE or "render-markdown"
+vim.g.markdown_renderer = namespace
+local function renderer_module(suffix)
+  return require(namespace .. (suffix and "." .. suffix or ""))
+end
+renderer_module().setup({
   file_types = { "lazyagent_acp" }, anti_conceal = { enabled = false },
   custom_handlers = { markdown = { parse = require("lazyagent.render_markdown").parse } },
 })
-local Node = require("render-markdown.lib.node")
+local Node = renderer_module("lib.node")
 local Bounded = require("lazyagent.render_markdown_node")
 local native_count = Node.sibling_count
-local Context = require("render-markdown.request.context")
-local Marks = require("render-markdown.lib.marks")
-local List = require("render-markdown.render.markdown.list")
-local state = require("render-markdown.state")
+local Context = renderer_module("request.context")
+local Marks = renderer_module("lib.marks")
+local List = renderer_module("render.markdown.list")
+local state = renderer_module("state")
 local adapter = require("lazyagent.render_markdown")
 local buf = vim.api.nvim_get_current_buf()
 vim.bo[buf].filetype = "lazyagent_acp"
@@ -67,7 +72,7 @@ vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
 })
 local table_tree = parser:parse(true)[1]
 local table_query = vim.treesitter.query.parse("markdown", "(pipe_table) @table")
-local Table = require("render-markdown.render.markdown.table")
+local Table = renderer_module("render.markdown.table")
 local tables = 0
 for _, ts_node in table_query:iter_captures(table_tree:root(), buf) do
   local function render(bounded)
@@ -119,7 +124,7 @@ view.create_pane({ transcript_path = path, size = 12,
 }, function(id, result) pane, info = id, result end)
 assert(vim.wait(2000, function() return pane ~= nil end, 10))
 vim.api.nvim_set_current_win(info.winid)
-local ui = require("render-markdown.core.ui")
+local ui = renderer_module("core.ui")
 for iteration = 1, 30 do
   vim.fn.maparg("gC", "n", false, true).callback()
   local current = assert(vim.treesitter.get_parser(info.bufnr, "markdown"))

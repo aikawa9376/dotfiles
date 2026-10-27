@@ -1,5 +1,14 @@
 # lazyagent.nvim
 
+Markdown rendering supports both `inkstone.nvim` and `render-markdown.nvim`.
+The integration prefers the configured renderer and detects the available plugin;
+neither renderer is mandatory. Set `vim.g.markdown_renderer` to `"inkstone"` or
+`"render-markdown"` to choose when both are installed (restart Neovim when changing
+backends). An unavailable preference falls back to the other plugin. Keep the
+chosen renderer's `custom_handlers.markdown.parse` pointing to
+`require("lazyagent.render_markdown").parse` for LazyAgent filetypes. Its public
+toggle, highlights and cache namespaces remain owned by that renderer.
+
 Neovim から Antigravity / Gemini / Claude / Codex / Copilot / Cursor などの agent CLI に指示を送るためのローカルプラグインです。
 
 scratch buffer に依頼を書き、tmux pane または ACP transcript buffer に送信します。プロジェクトごとの履歴保存、会話 checkpoint、ACP の model/mode/config picker、MCP hooks による編集後アクションも扱えます。

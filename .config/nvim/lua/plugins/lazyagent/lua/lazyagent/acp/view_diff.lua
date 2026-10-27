@@ -1,3 +1,4 @@
+local markdown_renderer = require("lazyagent.markdown_renderer")
 local M = {}
 local viewport = require("lazyagent.acp.view_buffer.viewport")
 
@@ -97,7 +98,7 @@ function M.new(ctx)
       return 0
     end
 
-    local ok_state, state = pcall(require, "render-markdown.state")
+    local ok_state, state = pcall(markdown_renderer.require, "state")
     if not ok_state or type(state.get) ~= "function" then
       return 0
     end

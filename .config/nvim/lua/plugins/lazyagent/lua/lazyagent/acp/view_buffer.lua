@@ -1,3 +1,4 @@
+local markdown_renderer = require("lazyagent.markdown_renderer")
 local M = {}
 
 local agent_logic = require("lazyagent.logic.agent")
@@ -190,19 +191,19 @@ local function cleanup_external_markdown_rendering(bufnr)
     pcall(vim.treesitter.stop, bufnr)
   end
 
-  local ok_manager, manager = pcall(require, "render-markdown.core.manager")
+  local ok_manager, manager = pcall(markdown_renderer.require, "core.manager")
   -- render-markdown has no detach API. Removing a valid buffer from its list leaves
   -- the buffer-local autocmd behind, so a later attach would duplicate every event.
   if not is_valid and ok_manager and type(manager) == "table" then
     remove_list_value(manager.buffers, bufnr)
   end
 
-  local ok_state, render_state = pcall(require, "render-markdown.state")
+  local ok_state, render_state = pcall(markdown_renderer.require, "state")
   if ok_state and type(render_state) == "table" and type(render_state.cache) == "table" then
     render_state.cache[bufnr] = nil
   end
 
-  local ok_ui, ui = pcall(require, "render-markdown.core.ui")
+  local ok_ui, ui = pcall(markdown_renderer.require, "core.ui")
   if ok_ui and type(ui) == "table" then
     if is_valid and ui.ns then
       pcall(vim.api.nvim_buf_clear_namespace, bufnr, ui.ns, 0, -1)
@@ -282,7 +283,7 @@ local function refresh_markdown_rendering(bufnr)
     pcall(require("lazyagent.acp.highlighter").start, bufnr)
   end
 
-  local ok_manager, manager = pcall(require, "render-markdown.core.manager")
+  local ok_manager, manager = pcall(markdown_renderer.require, "core.manager")
   if ok_manager and type(manager.attach) == "function" then
     local attached = render_markdown_is_attached(manager, bufnr)
     if not attached then
@@ -294,7 +295,7 @@ local function refresh_markdown_rendering(bufnr)
     end
   end
 
-  local ok_ui, ui = pcall(require, "render-markdown.core.ui")
+  local ok_ui, ui = pcall(markdown_renderer.require, "core.ui")
   if ok_ui and type(ui.update) == "function" then
     pcall(ui.update, bufnr, wins[1], "LazyAgentACPUpdate", false)
   end

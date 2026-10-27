@@ -1,6 +1,14 @@
-local Node = require("render-markdown.lib.node")
+local markdown_renderer = require("lazyagent.markdown_renderer")
+local Node = markdown_renderer.require("lib.node")
 local Bounded = setmetatable({}, { __index = Node })
-Bounded.__index = Bounded
+Bounded.__index = function(self, key)
+  local value = rawget(Bounded, key)
+  if value ~= nil then return value end
+  -- Inkstone uses a function here to retrieve node text lazily.
+  local index = Node.__index
+  if type(index) == "function" then return index(self, key) end
+  return index[key]
+end
 -- Lua resolves comparison metamethods directly on the instance's metatable.
 -- Table renderers sort these nodes; __index inheritance alone is insufficient.
 Bounded.__lt = Node.__lt

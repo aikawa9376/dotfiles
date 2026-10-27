@@ -1,3 +1,4 @@
+local markdown_renderer = require("lazyagent.markdown_renderer")
 local M = {}
 local sections = require("lazyagent.acp.view_buffer.sections")
 local viewport = require("lazyagent.acp.view_buffer.viewport")
@@ -39,15 +40,15 @@ function M.attach(bufnr)
 
   local function markdown()
     pcall(require("lazyagent.acp.highlighter").start, bufnr)
-    local ok, manager = pcall(require, "render-markdown.core.manager")
+    local ok, manager = pcall(markdown_renderer.require, "core.manager")
     if ok and type(manager.attach) == "function" then pcall(manager.attach, bufnr) end
-    local ok_ui, ui = pcall(require, "render-markdown.core.ui")
+    local ok_ui, ui = pcall(markdown_renderer.require, "core.ui")
     local win = visible_window()
     if ok_ui and type(ui.update) == "function" and win then
       pcall(ui.update, bufnr, win, "LazyAgentACPPreview", false)
       -- The external renderer throttles leading updates. Retry the final frame
       -- after its debounce so a quick mode/thread change cannot remain stale.
-      local state = package.loaded["render-markdown.state"]
+      local state = markdown_renderer.loaded("state")
       local config = state and state.cache and state.cache[bufnr]
       local delay = config and tonumber(config.debounce) or 0
       if delay > 0 then
@@ -109,7 +110,7 @@ function M.attach(bufnr)
       end
       vim.api.nvim_del_augroup_by_id(group)
       -- History-only Cockpits need not have initialized the live view's cleanup.
-      local ui = package.loaded["render-markdown.core.ui"]
+      local ui = markdown_renderer.loaded("core.ui")
       local decorator = ui and ui.cache and ui.cache[bufnr]
       if decorator and decorator.timer then
         decorator.timer:stop()
@@ -117,9 +118,9 @@ function M.attach(bufnr)
         decorator.timer = nil
       end
       if ui and ui.cache then ui.cache[bufnr] = nil end
-      local state = package.loaded["render-markdown.state"]
+      local state = markdown_renderer.loaded("state")
       if state and state.cache then state.cache[bufnr] = nil end
-      local manager = package.loaded["render-markdown.core.manager"]
+      local manager = markdown_renderer.loaded("core.manager")
       if manager and manager.buffers then
         for index = #manager.buffers, 1, -1 do
           if manager.buffers[index] == bufnr then table.remove(manager.buffers, index) end

@@ -124,6 +124,7 @@ return {
     },
   },
   init = function ()
+    vim.g.markdown_renderer = "render-markdown"
     vim.treesitter.language.register('markdown', 'blink-cmp-documentation')
 
     -- H1 ～ H6 のフォアグラウンド（文字色）と背景色の設定

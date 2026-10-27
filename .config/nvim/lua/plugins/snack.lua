@@ -232,12 +232,7 @@ return {
     end
 
     local function require_render_markdown()
-      load_plugins({ "render-markdown.nvim" })
-
-      local ok, loaded = pcall(require, "render-markdown")
-      if ok then
-        return loaded
-      end
+      return require("config.markdown_renderer").get()
     end
 
     local function render_markdown_is_enabled()
@@ -252,11 +247,11 @@ return {
     local function set_render_markdown_enabled(state)
       local render_markdown = require_render_markdown()
       if not render_markdown then
-        vim.notify("render-markdown.nvim is not available", vim.log.levels.ERROR)
+        vim.notify("No Markdown renderer is available (Inkstone or render-markdown)", vim.log.levels.ERROR)
         return
       end
       if type(render_markdown.set) ~= "function" then
-        vim.notify("render-markdown.nvim toggle API is not available", vim.log.levels.ERROR)
+        vim.notify("Markdown renderer toggle API is not available", vim.log.levels.ERROR)
         return
       end
 
