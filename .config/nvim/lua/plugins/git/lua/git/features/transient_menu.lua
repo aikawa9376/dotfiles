@@ -85,83 +85,84 @@ function M.show(spec, opts)
     end
     if #lines > 0 then lines[#lines + 1] = '' end
     local groups = vim.tbl_filter(function(group) return #group.actions > 0 end, spec.groups or {})
-    if spec.kind ~= 'root' and vim.g.git_action_menu_group_layout ~= 'vertical' then
-      local band, used = {}, 0
-      local function flush()
-        if #band == 0 then return end
-        local height = 0
-        for _, item in ipairs(band) do height = math.max(height, #item.group.actions) end
-        for offset = 0, height do
-          local line, cells, spans = '', {}, {}
-          for index, item in ipairs(band) do
-            local group = item.group
-            local value = offset == 0 and group.title
-              or (group.actions[offset] and snapshot(group.actions[offset]).text or '')
-            value = fit_text(value, item.width)
-            local start_col = #line
-            line = line .. value
-            if offset == 0 then
-              spans[#spans + 1] = { start_col, #line }
-            elseif group.actions[offset] then
-              cells[#cells + 1] = { action = group.actions[offset],
-                start_col = start_col, end_col = #line }
-            end
-            if index < #band then
-              line = line .. string.rep(' ', math.max(item.width - vim.fn.strdisplaywidth(value) + 2, 2))
-            end
-          end
-          lines[#lines + 1] = line:gsub('%s+$', '')
-          if #cells > 0 then rows[#lines] = cells end
-          if #spans > 0 then headings[#lines] = spans end
+    local vertical = vim.g.git_action_menu_group_layout == 'vertical'
+    -- Keep long lists near half the screen without widening short menus needlessly.
+    local row_limit = math.max(4, math.min(12, math.floor((vim.o.lines - 5) / 2)))
+    local function group_layout(group)
+      local count = #group.actions
+      local function measure(columns)
+        local height = math.ceil(count / columns)
+        local widths = {}
+        for index, action in ipairs(group.actions) do
+          local column = math.floor((index - 1) / height) + 1
+          widths[column] = math.max(widths[column] or 0, snapshot(action).width)
         end
-        lines[#lines + 1] = ''
-        band, used = {}, 0
+        local width = 0
+        for _, value in ipairs(widths) do width = width + value end
+        width = math.max(math.min(vim.fn.strdisplaywidth(group.title), available),
+          width + (#widths - 1) * 2)
+        return { group = group, height = height, widths = widths, width = width }
       end
-      for _, group in ipairs(groups) do
-        local width = vim.fn.strdisplaywidth(group.title)
-        for _, action in ipairs(group.actions) do
-          width = math.max(width, snapshot(action).width)
-        end
-        if used > 0 and used + width + 2 > available then flush() end
-        width = math.min(width, available)
-        band[#band + 1] = { group = group, width = width }
-        used = used + width + (#band > 1 and 2 or 0)
+      local item = measure(1)
+      local preferred = group.columns or spec.columns or 1
+      for columns = 2, count do
+        if columns > preferred and (vertical or item.height <= row_limit) then break end
+        local candidate = measure(columns)
+        if candidate.width <= available then item = candidate end
       end
-      flush()
-    else
-      for _, group in ipairs(groups) do
-        local title = fit_text(group.title, available)
-        lines[#lines + 1] = title
-        headings[#lines] = { { 0, #title } }
-        local columns = group.columns or spec.columns or 1
-        if available < 76 then columns = 1 end
-        if columns > 1 then
-          for first = 1, #group.actions, columns do
-            local width = 0
-            for index = first, math.min(first + columns - 1, #group.actions) do
-              if index > first then width = width + math.max(32 - width, 2) end
-              width = width + snapshot(group.actions[index]).width
-            end
-            if width > available then columns = 1; break end
-          end
-        end
-        for first = 1, #group.actions, columns do
-          local line, cells = '', {}
-          for index = first, math.min(first + columns - 1, #group.actions) do
-            local action = group.actions[index]
-            if index > first then
-              line = line .. string.rep(' ', math.max(32 - vim.fn.strdisplaywidth(line), 2))
-            end
-            local start_col = #line
-            line = line .. fit_text(snapshot(action).text, available)
-            cells[#cells + 1] = { action = action, start_col = start_col, end_col = #line }
-          end
-          lines[#lines + 1] = line
-          rows[#lines] = cells
-        end
-        lines[#lines + 1] = ''
-      end
+      item.width = math.min(item.width, available)
+      if #item.widths == 1 then item.widths[1] = item.width end
+      return item
     end
+    local band, used = {}, 0
+    local function flush()
+      if #band == 0 then return end
+      local height = 0
+      for _, item in ipairs(band) do height = math.max(height, item.height) end
+      for offset = 0, height do
+        local line, cells, spans = '', {}, {}
+        for index, item in ipairs(band) do
+          local start_col = #line
+          local value = ''
+          if offset == 0 then
+            value = fit_text(item.group.title, item.width)
+            spans[#spans + 1] = { start_col, start_col + #value }
+          else
+            for column, width in ipairs(item.widths) do
+              local action = item.group.actions[(column - 1) * item.height + offset]
+              local text = offset <= item.height and action and fit_text(snapshot(action).text, width) or ''
+              local cell_start = start_col + #value
+              value = value .. text
+              if text ~= '' then
+                cells[#cells + 1] = { action = action, start_col = cell_start,
+                  end_col = start_col + #value }
+              end
+              if column < #item.widths then
+                value = value .. string.rep(' ', width - vim.fn.strdisplaywidth(text) + 2)
+              end
+            end
+          end
+          line = line .. value
+          if index < #band then
+            line = line .. string.rep(' ', math.max(item.width - vim.fn.strdisplaywidth(value) + 2, 2))
+          end
+        end
+        lines[#lines + 1] = line:gsub('%s+$', '')
+        if #cells > 0 then rows[#lines] = cells end
+        if #spans > 0 then headings[#lines] = spans end
+      end
+      lines[#lines + 1] = ''
+      band, used = {}, 0
+    end
+    for _, group in ipairs(groups) do
+      local item = group_layout(group)
+      if used > 0 and (spec.kind == 'root' or vertical or used + item.width + 2 > available) then
+        flush()
+      end
+      band[#band + 1] = item
+      used = used + item.width + (#band > 1 and 2 or 0)
+    end
+    flush()
     if lines[#lines] == '' then table.remove(lines) end
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -273,6 +274,24 @@ function M.show(spec, opts)
   vim.wo[win].list = false
   vim.api.nvim_set_option_value('wrap', false, { win = win, scope = 'local' })
   vim.wo[win].cursorline = true
+
+  local resize_group = vim.api.nvim_create_augroup('git_transient_menu_resize_' .. buf, { clear = true })
+  local resize_pending = false
+  vim.api.nvim_create_autocmd({ 'VimResized', 'WinResized' }, {
+    group = resize_group,
+    callback = function()
+      if resize_pending then return end
+      resize_pending = true
+      vim.schedule(function()
+        resize_pending = false
+        render()
+      end)
+    end,
+  })
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    group = resize_group, buffer = buf, once = true,
+    callback = function() vim.api.nvim_del_augroup_by_id(resize_group) end,
+  })
 
   local function close()
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end

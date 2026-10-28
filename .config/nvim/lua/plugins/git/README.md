@@ -1384,13 +1384,18 @@ fixup-target detection, and patch collection. A selected commit also exposes
 Each operation panel shows its arguments and
 execution keys. Toggle an argument with its displayed key, then press an
 execution key; `q` or `<Esc>` closes the menu. An active cherry-pick, revert,
-merge, rebase, or bisect shows its sequence actions. The root arranges actions
-in two columns when the editor is wide enough. The default layout is a bottom
+merge, rebase, or bisect shows its sequence actions. The root starts with two
+action columns when they fit. Long lists, including Operations, flow down and
+then into additional columns when their full labels fit the available width.
+Automatic columns aim for at most 12 action rows (fewer on short screens);
+narrow windows retain a vertical list. Open menus reflow on resize while
+retaining the selected action. The default layout is a bottom
 split. Set `vim.g.git_action_menu_layout = 'float'` for a lower-right float.
 Operation panels place whole argument/action groups side by side when they fit
 and wrap them on narrower screens. Set
 `vim.g.git_action_menu_group_layout = 'vertical'` to restore the previous
-one-group-per-row layout; unset it or use `'horizontal'` for the new layout.
+one-group-per-row layout and disable automatic extra columns; unset it or use
+`'horizontal'` for the adaptive layout.
 The existing panel keys and `?` help remain separate.
 
 In the Branch (`b`) menu, `u` sets upstream when unset and removes it when

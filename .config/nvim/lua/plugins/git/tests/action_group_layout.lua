@@ -109,6 +109,87 @@ assert(vim.api.nvim_win_get_config(ui.winid).relative == 'editor'
   and lines(ui)[1]:find('Actions', 1, true),
   'horizontal groups did not work in the float layout')
 ui.close()
+-- Long groups flow down, then right, using actual label widths in either window layout.
+local original_lines = vim.o.lines
+vim.o.lines = 40
+vim.o.columns = 120
+vim.g.git_action_menu_layout = 'split'
+vim.g.git_action_menu_group_layout = nil
+local long_actions = {}
+for index = 1, 36 do
+  local action_index = index
+  long_actions[index] = { key = ('k%02d'):format(index),
+    label = ('操作 %02d'):format(index), run = function() chosen = action_index end }
+end
+local long_spec = { kind = 'root', columns = 2, groups = {
+  { title = 'Ref: main', actions = { { key = 'x', label = 'Inspect' } } },
+  { title = 'Operations', actions = long_actions },
+} }
+local function find_action(ui, key)
+  for row_number, line in ipairs(lines(ui)) do
+    local column = line:find(key, 1, true)
+    if column then return row_number, column - 1 end
+  end
+  error('missing action ' .. key)
+end
+ui = menu.show(long_spec)
+assert(#lines(ui) == 16 and lines(ui)[1] == 'Ref: main',
+  'long root group did not use three columns while retaining its target heading')
+local first_row = find_action(ui, 'k01')
+local last_row, last_column = find_action(ui, 'k25')
+assert(first_row == last_row and last_column > 0,
+  'long group did not flow down before continuing in the right column')
+local right_key_highlighted = false
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.bufnr, -1, 0, -1, { details = true })) do
+  if mark[2] == last_row - 1 and mark[3] == last_column
+    and mark[4].hl_group == 'GitActionMenuKey' then right_key_highlighted = true end
+end
+assert(right_key_highlighted, 'right-column key highlight drifted after multibyte labels')
+vim.api.nvim_win_set_cursor(ui.winid, { last_row, last_column })
+vim.fn.maparg('<CR>', 'n', false, true).callback()
+assert(chosen == 25, 'Enter executed the wrong action in a flowed column')
+
+vim.cmd('vsplit')
+local narrow_source = vim.api.nvim_get_current_win()
+vim.api.nvim_win_set_width(narrow_source, 25)
+ui = menu.show(long_spec)
+assert(#lines(ui) == 40, 'long group did not fall back to one column in a narrow split')
+for _, line in ipairs(lines(ui)) do
+  assert(vim.fn.strdisplaywidth(line) <= vim.api.nvim_win_get_width(ui.winid),
+    'flowed action overflowed the actual menu width')
+end
+local selected_row, selected_column = find_action(ui, 'k25')
+vim.api.nvim_win_set_cursor(ui.winid, { selected_row, selected_column })
+-- The source and its menu share a frame, so widening either resizes both.
+vim.api.nvim_win_set_width(ui.winid, 100)
+vim.api.nvim_exec_autocmds('WinResized', {})
+vim.wait(1000, function() return #lines(ui) == 16 end)
+assert(#lines(ui) == 16, 'resize did not reflow the open menu')
+local cursor = vim.api.nvim_win_get_cursor(ui.winid)
+assert(lines(ui)[cursor[1]]:sub(cursor[2] + 1):find('k25', 1, true)
+  and cursor[2] > 0, 'reflow did not retain the selected action in its new column')
+vim.fn.maparg('<CR>', 'n', false, true).callback()
+assert(chosen == 25, 'Enter lost its selected action after resizing')
+vim.cmd('only')
+
+vim.g.git_action_menu_group_layout = 'vertical'
+ui = menu.show({ kind = 'long-operation', groups = { long_spec.groups[2] } })
+assert(#lines(ui) == 37, 'vertical group layout no longer opts out of automatic columns')
+ui.close()
+vim.g.git_action_menu_group_layout = nil
+vim.g.git_action_menu_layout = 'float'
+ui = menu.show({ kind = 'long-operation', groups = { long_spec.groups[2] } })
+assert(#lines(ui) == 13 and vim.api.nvim_win_get_config(ui.winid).relative == 'editor',
+  'long operation group did not flow inside a float')
+local float_width = vim.api.nvim_win_get_width(ui.winid)
+for _, line in ipairs(lines(ui)) do
+  assert(vim.fn.strdisplaywidth(line) <= float_width, 'flowed action overflowed the float')
+end
+-- Queued resize callbacks must remain harmless after the menu buffer is wiped.
+vim.api.nvim_exec_autocmds('VimResized', {})
+ui.close()
+vim.wait(10, function() return false end)
+vim.o.lines = original_lines
 local option_state = { command = 'echo done' }
 local option = require('git.features.transient_options').value('-x', 'Command (per commit)',
   option_state, 'command', '--exec=')
