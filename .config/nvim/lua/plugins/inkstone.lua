@@ -115,11 +115,13 @@ return {
           code = vim.tbl_extend('force', code_padding, { sign = false }),
         },
         lazyagent = {
+          typography = { enabled = false },
           code = code_padding,
           debounce = 300,
           render_modes = { 'n', 't' },
         },
         lazyagent_acp = {
+          typography = { enabled = false },
           code = code_padding,
           debounce = 300,
           render_modes = { 'n', 't' },
