@@ -2,6 +2,7 @@ local M = {}
 local menu = require('git.features.transient_menu')
 local utils = require('git.utils')
 local options = require('git.features.transient_options')
+local availability = require('git.features.magit_availability')
 local flag, value_flag, exclusive_flag = options.flag, options.value, options.exclusive_flag
 
 local function context(bufnr, row)
@@ -14,7 +15,8 @@ local function context(bufnr, row)
   row = row or vim.api.nvim_win_get_cursor(0)[1]
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
   if panel == 'status' and require('git.features.status_modules').at(bufnr, row) then line = '' end
-  local commit = line:match('^(%x%x%x%x%x%x%x+)')
+  local commit = (panel == 'status' or panel == 'log')
+    and line:match('^(%x%x%x%x%x%x%x+)%s') or nil
   if panel == 'commit' then commit = vim.b[bufnr].git_commit end
   local branch = panel == 'branch' and (vim.b[bufnr].branch_map or {})[row] or nil
   local kind = panel == 'branch' and (vim.b[bufnr].branch_kinds or {})[row] or nil
@@ -53,7 +55,8 @@ local function context(bufnr, row)
   end
   return {
     panel = panel, bufnr = bufnr, work_tree = utils.get_buf_work_tree(bufnr),
-    source_win = vim.api.nvim_get_current_win(),
+    source_win = vim.api.nvim_get_current_win(), source_row = row,
+    source_selections = { { row = row, value = require('git.features.action_selection').capture(bufnr, row) } },
     commit = commit, branch = branch, branch_kind = kind, path = path,
     section = entry and entry.section or (tree_node and tree_node.section),
     hunk = hunk,
@@ -65,6 +68,7 @@ end
 M.context = context
 
 local function git(args, ctx)
+  if ctx and not availability.valid(ctx, true) then return end
   local quoted = {}
   for _, arg in ipairs(args) do
     if arg:find('[\r\n]') then error('Git arguments cannot contain newlines') end
@@ -80,15 +84,19 @@ local function git(args, ctx)
   return run()
 end
 
-local function existing_key(key)
-  local mapping = vim.fn.maparg(key, 'n', false, true)
-  if type(mapping.callback) == 'function' then mapping.callback(); return end
-  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), 'm', false)
+local function existing_key(ctx, key)
+  if not availability.valid(ctx, true) then return end
+  local ok, reason, mapping = availability.mapping(ctx, key)
+  if not ok then vim.notify(reason, vim.log.levels.WARN); return end
+  vim.api.nvim_set_current_win(ctx.source_win)
+  vim.api.nvim_win_set_cursor(ctx.source_win, { ctx.source_row, 0 })
+  if type(mapping.callback) == 'function' then return mapping.callback() end
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(mapping.rhs, true, false, true), 'n', false)
 end
 
 local function target_commit(ctx, callback)
   if ctx.commit then callback(ctx.commit); return end
-  vim.ui.input({ prompt = 'Commit or range: ' }, function(value)
+  availability.input(ctx, { prompt = 'Commit or range: ' }, function(value)
     if value and vim.trim(value) ~= '' then callback(vim.trim(value)) end
   end)
 end
@@ -103,8 +111,8 @@ local function target_commits(ctx, reverse, callback)
   end
 end
 
-local function input(prompt, callback, default)
-  vim.ui.input({ prompt = prompt, default = default }, function(value)
+local function input(ctx, prompt, callback, default)
+  availability.input(ctx, { prompt = prompt, default = default }, function(value)
     if value and vim.trim(value) ~= '' then callback(vim.trim(value)) end
   end)
 end
@@ -190,8 +198,8 @@ local function selected_transfer(ctx)
 end
 
 local function show_submenu(spec, ui)
-  return menu.show(spec, { source_win = ui.source_win, source_buf = ui.source_buf,
-    layout = ui.layout })
+  return menu.show(availability.bind(spec, ui.action_context), { source_win = ui.source_win, source_buf = ui.source_buf,
+    layout = ui.layout, availability = ui.availability, action_context = ui.action_context })
 end
 
 local function branch_config_action(ctx)
@@ -224,9 +232,10 @@ end
 
 local function sequence_menu(ctx, ui, title, kind)
   return show_submenu({ kind = kind, title = title,
+    requires = { availability.operation(kind == 'cherry-pick' and 'cherry_pick' or kind) }, mutation = true,
     context = 'Operation in progress', groups = {
       { title = 'Actions', actions = {
-        { key = kind == 'revert' and 'V' or 'A', label = 'Continue',
+        { key = kind == 'revert' and 'V' or 'A', label = 'Continue', requires = { 'resolved' },
           run = function() git({ kind, '--continue' }, ctx) end },
         { key = 's', label = 'Skip current commit',
           run = function() git({ kind, '--skip' }, ctx) end },
@@ -250,7 +259,7 @@ local function cherry_menu(ctx, ui)
       local args = { 'cherry-pick' }
       vim.list_extend(args, flag_args(state))
       if state.reference then args[#args + 1] = '-x' end
-      if state.ff then args[#args + 1] = '--ff' end
+      if state.ff and not no_commit and not state.no_commit then args[#args + 1] = '--ff' end
       if state.edit then args[#args + 1] = '--edit' end
       if state.strategy then args[#args + 1] = '--strategy=' .. state.strategy end
       if state.gpg_sign then args[#args + 1] = '--gpg-sign=' .. state.gpg_sign end
@@ -267,7 +276,7 @@ local function cherry_menu(ctx, ui)
         if not ok then vim.notify(err, vim.log.levels.ERROR) end
       end
       if direction == 'donate' then
-        input('Donate to local branch: ', perform)
+        input(ctx, 'Donate to local branch: ', perform)
         return
       end
       local containing = git_value(ctx, { 'for-each-ref', '--contains=' .. commit,
@@ -281,7 +290,7 @@ local function cherry_menu(ctx, ui)
         vim.split(containing, '\n', { trimempty = true }))
       if #branches == 1 then perform(branches[1])
       elseif #branches > 1 then
-        vim.ui.select(branches, { prompt = 'Remove commit from branch: ' }, function(branch)
+        availability.select(ctx, branches, { prompt = 'Remove commit from branch: ' }, function(branch)
           if branch then perform(branch) end
         end)
       else vim.notify('No other local branch contains the selected commit', vim.log.levels.WARN) end
@@ -293,41 +302,48 @@ local function cherry_menu(ctx, ui)
     groups = {
       { title = 'Arguments', actions = {
         exclusive_flag('-x', 'Reference source commit', state, 'reference', 'ff', '-x'),
-        flag('-n', 'Apply without committing', state, 'no_commit', '--no-commit'),
-        flag('-s', 'Add Signed-off-by', state, 'signoff', '--signoff'),
-        exclusive_flag('-F', 'Fast-forward if possible', state, 'ff', 'reference', '--ff'),
-        flag('-e', 'Edit commit message', state, 'edit', '--edit'),
+        flag('-n', 'Apply without committing', state, 'no_commit', '--no-commit', 'ff'),
+        flag('-s', 'Add Signed-off-by', state, 'signoff', '--signoff', 'ff'),
+        exclusive_flag('-F', 'Fast-forward if possible', state, 'ff',
+          { 'reference', 'no_commit', 'signoff', 'edit' }, '--ff'),
+        flag('-e', 'Edit commit message', state, 'edit', '--edit', 'ff'),
         mainline_flag(state),
         value_flag('=s', 'Strategy', state, 'strategy', '--strategy='),
         value_flag('-S', 'Sign using GPG', state, 'gpg_sign', '--gpg-sign='),
       } },
-      { title = 'Actions', actions = {
-        { key = 'A', label = 'Pick commit', run = function() pick(false) end },
-        { key = 'a', label = 'Apply changes without committing',
+      { title = 'Actions', mutation = true, requires = { 'no_sequence', 'resolved', 'selected' }, actions = {
+        { key = 'A', requires = { 'replay', 'commit_index' }, label = 'Pick commit', run = function() pick(false) end },
+        { key = 'a', requires = { 'replay' }, label = 'Apply changes without committing',
           run = function() pick(true) end },
-        { key = 'h', label = 'Harvest commit from another branch', enabled = not ctx.commits,
+        { key = 'h', requires = { 'head', 'branch', 'idle', 'clean', 'harvest' },
+          label = 'Harvest commit from another branch', enabled = not ctx.commits,
           run = function() move('harvest') end },
-        { key = 'd', label = 'Donate commit to another branch', enabled = not ctx.commits,
+        { key = 'd', requires = { 'head', 'branch', 'idle', 'clean', 'donate' },
+          label = 'Donate commit to another branch', enabled = not ctx.commits,
           run = function() move('donate') end },
-        { key = 's', label = 'Spin off selected commits', enabled = not ctx.commits,
-          run = function() existing_key('bs') end },
-        { key = 'n', label = 'Spin out selected commits', enabled = not ctx.commits,
-          run = function() existing_key('bS') end },
+        { key = 's', requires = { 'spin' }, label = 'Spin off selected commits', enabled = not ctx.commits,
+          source_key = 'bs', run = function() existing_key(ctx, 'bs') end },
+        { key = 'n', requires = { 'spin' }, label = 'Spin out selected commits', enabled = not ctx.commits,
+          source_key = 'bS', run = function() existing_key(ctx, 'bS') end },
       } },
     },
   }, ui)
 end
 
 local function apply_patch(ctx, reverse, three_way)
+  if not availability.valid(ctx, true) then return end
   local ok, err = require('git.features.magit_apply').apply(ctx, three_way or false, reverse)
   if not ok then vim.notify(err, vim.log.levels.ERROR) end
 end
 
 local function apply_variants_menu(ctx, ui)
   local state = { three_way = false }
-  local target = ctx.commit or ctx.target_head or ctx.branch
-  local patch_ctx = vim.tbl_extend('force', {}, ctx)
-  if not patch_ctx.commit then patch_ctx.commit = target end
+  local target = ctx.commit or ctx.target_head or availability.ref(ctx)
+  local function apply(reverse)
+    local patch_ctx = vim.tbl_extend('force', {}, ctx)
+    if not patch_ctx.commit then patch_ctx.commit = target end
+    apply_patch(patch_ctx, reverse, state.three_way)
+  end
   local staged = ctx.panel == 'status' and ctx.path and ctx.section == 'staged'
   local can_patch = target or staged
   local can_discard = ctx.panel == 'status' and ctx.path ~= nil
@@ -340,18 +356,20 @@ local function apply_variants_menu(ctx, ui)
       { title = 'Arguments', actions = {
         flag('-3', 'Three-way fallback (also stages)', state, 'three_way', '--3way'),
       } },
-      { title = 'Patch', actions = {
+      { title = 'Patch', mutation = true, requires = { 'selected' }, actions = {
         { key = 'a', label = 'Apply to worktree', enabled = not not can_patch,
+          requires = { 'patch_source' },
           reason = 'Select a commit or staged change',
-          run = function() apply_patch(patch_ctx, false, state.three_way) end },
+          run = function() apply(false) end },
         { key = 'v', label = 'Reverse in worktree', enabled = not not can_patch,
+          requires = { 'patch_source' },
           reason = 'Select a commit or staged change',
-          run = function() apply_patch(patch_ctx, true, state.three_way) end },
+          run = function() apply(true) end },
         { key = 'k', label = 'Discard selected change', enabled = not not can_discard,
           reason = 'Select a changed file or hunk in status',
-          run = function() existing_key('X') end },
+          source_key = 'X', run = function() existing_key(ctx, 'X') end },
       } },
-      { title = 'Commit', actions = {
+      { title = 'Commit', mutation = true, requires = { 'no_sequence', 'resolved', 'selected', 'replay', 'commit_index' }, actions = {
         { key = 'C', label = 'Cherry-pick and commit', enabled = not not target,
           reason = 'Select a commit',
           run = function() git({ 'cherry-pick', target }, ctx) end },
@@ -396,8 +414,8 @@ local function revert_menu(ctx, ui)
         value_flag('=s', 'Strategy', state, 'strategy', '--strategy='),
         value_flag('-S', 'Sign using GPG', state, 'gpg_sign', '--gpg-sign='),
       } },
-      { title = 'Actions', actions = {
-        { key = 'V', label = 'Revert and commit', run = function() revert(false) end },
+      { title = 'Actions', mutation = true, requires = { 'no_sequence', 'resolved', 'selected', 'replay' }, actions = {
+        { key = 'V', requires = { 'commit_index' }, label = 'Revert and commit', run = function() revert(false) end },
         { key = 'v', label = 'Revert changes without committing',
           run = function() revert(true) end },
       } },
@@ -439,23 +457,24 @@ local function commit_menu(ctx, ui)
         value_flag('-C', 'Reuse commit message', state, 'reuse_message', '--reuse-message=', nil, 'reedit_message'),
         value_flag('-c', 'Reedit commit message', state, 'reedit_message', '--reedit-message=', nil, 'reuse_message'),
       } },
-      { title = 'Actions', actions = {
-        { key = 'c', label = 'Commit staged changes', run = function() commit() end },
-        { key = 'a', label = 'Amend HEAD', run = function() commit({ '--amend' }) end },
-        { key = 'e', label = 'Amend without editing message',
+      { title = 'Actions', mutation = true, requires = { 'resolved' }, actions = {
+        { key = 'c', requires = { 'committable', 'commit_author' }, label = 'Commit staged changes', run = function() commit() end },
+        { key = 'a', requires = { 'amend' }, label = 'Amend HEAD', run = function() commit({ '--amend' }) end },
+        { key = 'e', requires = { 'amend' }, label = 'Amend without editing message',
           run = function() commit({ '--amend', '--no-edit' }) end },
-        { key = 'w', label = ctx.commit and ('Reword ' .. short_target(ctx)) or 'Reword HEAD',
+        { key = 'w', requires = { 'amend', 'reword' }, label = ctx.commit and ('Reword ' .. short_target(ctx)) or 'Reword HEAD',
           run = function()
-            if ctx.commit then existing_key('cw')
+            if ctx.commit then existing_key(ctx, 'cw')
             else commit({ '--amend', '--only', '--edit' }) end
           end },
-        { key = 'f', label = 'Create fixup commit', run = function()
+        { key = 'f', requires = { 'selected', 'committable', 'commit_author', 'fixup_message' },
+          label = 'Create fixup commit', run = function()
           target_commit(ctx, function(ref) commit({ '--fixup=' .. ref }) end)
         end },
-        { key = 'F', label = 'Find fixup target from changes', run = function()
+        { key = 'F', requires = { 'head', 'idle', 'tracked_changes' }, label = 'Find fixup target from changes', run = function()
           require('git.features.fixup_target').open(ctx)
         end },
-        { key = 's', label = 'Create squash commit', run = function()
+        { key = 's', requires = { 'selected', 'committable', 'commit_author' }, label = 'Create squash commit', run = function()
           target_commit(ctx, function(ref) commit({ '--squash=' .. ref }) end)
         end },
       } },
@@ -464,9 +483,9 @@ local function commit_menu(ctx, ui)
 end
 
 local function target_ref(ctx, prompt, callback)
-  local selected = ctx.commit or ctx.branch
+  local selected = availability.ref(ctx)
   if selected then callback(selected); return end
-  vim.ui.input({ prompt = prompt }, function(value)
+  availability.input(ctx, { prompt = prompt }, function(value)
     if value and vim.trim(value) ~= '' then callback(vim.trim(value)) end
   end)
 end
@@ -477,19 +496,21 @@ local function branch_menu(ctx, ui)
   local branch = config.branch(ctx)
   local state = { recurse_submodules = false }
   local actions = {
-    { key = 'b', label = 'Check out branch or revision', run = function()
-      if chosen and ctx.branch_kind ~= 'tags' then
-        if ctx.panel == 'branch' and not state.recurse_submodules and not state.merge then
-          existing_key('coo')
+    { key = 'b', mutation = true, requires = { 'no_sequence', 'resolved', 'selected', 'checkout_source' },
+      label = 'Check out branch or revision', run = function()
+      if chosen then
+        if ctx.panel == 'branch' and ctx.branch_kind ~= 'tags' and not state.recurse_submodules and not state.merge then
+          existing_key(ctx, 'coo')
         else
-          local args = { 'switch' }
+          local args = { ctx.branch_kind == 'local_' and 'switch' or 'checkout' }
           if state.recurse_submodules then args[#args + 1] = '--recurse-submodules' end
           if state.merge then args[#args + 1] = '--merge' end
-          args[#args + 1] = chosen
+          if ctx.branch_kind == 'tags' then args[#args + 1] = '--detach' end
+          args[#args + 1] = ctx.branch_kind == 'tags' and availability.ref(ctx) or chosen
           git(args, ctx)
         end
       else
-        vim.ui.input({ prompt = 'Branch or revision: ' }, function(ref)
+        availability.input(ctx, { prompt = 'Branch or revision: ' }, function(ref)
           if ref and vim.trim(ref) ~= '' then
             local args = { 'checkout' }
             if state.recurse_submodules then args[#args + 1] = '--recurse-submodules' end
@@ -500,26 +521,28 @@ local function branch_menu(ctx, ui)
         end)
       end
     end },
-    { key = 'c', label = 'Create and check out branch', run = function()
-      vim.ui.input({ prompt = 'New branch name: ' }, function(name)
+    { key = 'c', mutation = true, requires = { 'no_sequence', 'resolved', 'selected' },
+      label = 'Create and check out branch', run = function()
+      availability.input(ctx, { prompt = 'New branch name: ' }, function(name)
         if name and name ~= '' then
           local args = { 'switch' }
           if state.recurse_submodules then args[#args + 1] = '--recurse-submodules' end
           if state.merge then args[#args + 1] = '--merge' end
-          vim.list_extend(args, { '-c', name, ctx.commit or ctx.branch or 'HEAD' })
+          vim.list_extend(args, { '-c', name })
+          if availability.ref(ctx) then args[#args + 1] = availability.ref(ctx) end
           git(args, ctx)
         end
       end)
     end },
-    { key = 'n', label = 'Create branch without checkout', run = function()
-      vim.ui.input({ prompt = 'New branch name: ' }, function(name)
+    { key = 'n', mutation = true, requires = { 'startpoint', 'selected' }, label = 'Create branch without checkout', run = function()
+      availability.input(ctx, { prompt = 'New branch name: ' }, function(name)
         if name and name ~= '' then
-          git({ 'branch', name, ctx.commit or ctx.branch or 'HEAD' }, ctx)
+          git({ 'branch', name, availability.ref(ctx) or 'HEAD' }, ctx)
         end
       end)
     end },
-    { key = 'l', label = 'Check out local branch', run = function()
-      input('Local branch: ', function(branch)
+    { key = 'l', mutation = true, requires = { 'no_sequence', 'resolved' }, label = 'Check out local branch', run = function()
+      input(ctx, 'Local branch: ', function(branch)
         local args = { 'switch' }
         if state.recurse_submodules then args[#args + 1] = '--recurse-submodules' end
         if state.merge then args[#args + 1] = '--merge' end
@@ -527,7 +550,7 @@ local function branch_menu(ctx, ui)
         git(args, ctx)
       end, chosen and ctx.branch_kind == 'local_' and chosen or nil)
     end },
-    { key = 'v', label = 'Check out previous branch',
+    { key = 'v', mutation = true, requires = { 'no_sequence', 'resolved', 'previous_branch' }, label = 'Check out previous branch',
       run = function()
         local args = { 'switch' }
         if state.recurse_submodules then args[#args + 1] = '--recurse-submodules' end
@@ -535,16 +558,17 @@ local function branch_menu(ctx, ui)
         args[#args + 1] = '-'
         git(args, ctx)
       end },
-    { key = 'w', label = 'Check out in new worktree', run = function()
-      input('Worktree path: ', function(path)
+    { key = 'w', mutation = true, requires = { 'startpoint', 'selected', 'unoccupied_target' },
+      label = 'Check out in new worktree', run = function()
+      input(ctx, 'Worktree path: ', function(path)
         target_ref(ctx, 'Branch or revision: ', function(ref)
           git({ 'worktree', 'add', path, ref }, ctx)
         end)
       end)
     end },
-    { key = 'W', label = 'Create branch in new worktree', run = function()
-      input('Worktree path: ', function(path)
-        input('New branch name: ', function(name)
+    { key = 'W', mutation = true, requires = { 'head' }, label = 'Create branch in new worktree', run = function()
+      input(ctx, 'Worktree path: ', function(path)
+        input(ctx, 'New branch name: ', function(name)
           git({ 'worktree', 'add', '-b', name, path }, ctx)
         end)
       end)
@@ -553,19 +577,20 @@ local function branch_menu(ctx, ui)
   }
   if chosen and ctx.branch_kind ~= 'tags' then
     vim.list_extend(actions, {
-      { key = 'L', label = 'Log ' .. chosen, run = function() existing_key('L') end },
-      { key = 'm', label = 'Rename ' .. chosen, run = function()
-        vim.ui.input({ prompt = 'New branch name: ' }, function(name)
+      { key = 'L', label = 'Log ' .. chosen, source_key = 'L', run = function() existing_key(ctx, 'L') end },
+      { key = 'm', mutation = true, requires = { 'local_ref' }, label = 'Rename ' .. chosen, run = function()
+        availability.input(ctx, { prompt = 'New branch name: ' }, function(name)
           if name and name ~= '' then git({ 'branch', '-m', chosen, name }, ctx) end
         end)
       end },
-      { key = 'D', label = 'Delete ' .. chosen, run = function()
+      { key = 'D', mutation = true, requires = { 'local_ref', 'unoccupied', 'deletable' },
+        label = 'Delete ' .. chosen, run = function()
         if vim.fn.confirm('Delete branch ' .. chosen .. '?', '&Yes\n&No', 2) == 1 then
           git({ 'branch', '-d', chosen }, ctx)
         end
       end },
-      { key = 'X', label = 'Reset branch to ref', run = function()
-        input('Reset ' .. chosen .. ' to ref: ', function(ref)
+      { key = 'X', mutation = true, requires = { 'local_ref', 'unoccupied' }, label = 'Reset branch to ref', run = function()
+        input(ctx, 'Reset ' .. chosen .. ' to ref: ', function(ref)
           if vim.fn.confirm('Move branch ' .. chosen .. ' to ' .. ref .. '?',
             '&Yes\n&No', 2) == 1 then
             git({ 'branch', '-f', chosen, ref }, ctx)
@@ -576,8 +601,10 @@ local function branch_menu(ctx, ui)
   end
   if ctx.panel == 'status' or ctx.panel == 'log' or ctx.panel == 'branch' then
     vim.list_extend(actions, {
-      { key = 's', label = 'Spin off outgoing commits', run = function() existing_key('bs') end },
-      { key = 'S', label = 'Spin out outgoing commits', run = function() existing_key('bS') end },
+      { key = 's', mutation = true, requires = { 'spin' },
+        label = 'Spin off outgoing commits', source_key = 'bs', run = function() existing_key(ctx, 'bs') end },
+      { key = 'S', mutation = true, requires = { 'spin' },
+        label = 'Spin out outgoing commits', source_key = 'bS', run = function() existing_key(ctx, 'bS') end },
     })
   end
   local groups = config.branch_groups(ctx, branch)
@@ -599,9 +626,10 @@ end
 local function merge_menu(ctx, ui)
   if active_operation(ctx) == 'merge' then
     return show_submenu({ kind = 'merge', title = 'Merge',
+      requires = { availability.operation('merge') }, mutation = true,
       context = 'Merge in progress', groups = {
-        { title = 'Actions', actions = {
-          { key = 'm', label = 'Continue merge',
+        { title = 'Actions', mutation = true, actions = {
+          { key = 'm', label = 'Continue merge', requires = { 'resolved' },
             run = function() git({ 'merge', '--continue' }, ctx) end },
           { key = 'a', label = 'Abort merge',
             run = function() git({ 'merge', '--abort' }, ctx) end },
@@ -646,7 +674,7 @@ local function merge_menu(ctx, ui)
         value_flag('-S', 'Sign using GPG', state, 'gpg_sign', '--gpg-sign='),
         flag('=s', 'Add Signed-off-by', state, 'signoff', '--signoff'),
       } },
-      { title = 'Actions', actions = {
+      { title = 'Actions', mutation = true, requires = { 'no_sequence', 'resolved', 'selected', 'merge_arguments' }, actions = {
         { key = 'm', label = 'Merge ' .. short_target(ctx), run = function() merge() end },
         { key = 'e', label = 'Merge and edit message',
           run = function() merge({ '--edit' }) end },
@@ -662,13 +690,14 @@ end
 local function rebase_menu(ctx, ui)
   if active_operation(ctx) == 'rebase' then
     return show_submenu({ kind = 'rebase', title = 'Rebase',
+      requires = { availability.operation('rebase') }, mutation = true,
       context = 'Rebase in progress', groups = {
         { title = 'Actions', actions = {
-          { key = 'r', label = 'Continue rebase',
+          { key = 'r', label = 'Continue rebase', requires = { 'resolved' },
             run = function() git({ 'rebase', '--continue' }, ctx) end },
           { key = 's', label = 'Skip current commit',
             run = function() git({ 'rebase', '--skip' }, ctx) end },
-          { key = 'e', label = 'Edit todo list',
+          { key = 'e', label = 'Edit todo list', requires = { 'edit_todo' },
             run = function() git({ 'rebase', '--edit-todo' }, ctx) end },
           { key = 'a', label = 'Abort rebase',
             run = function() git({ 'rebase', '--abort' }, ctx) end },
@@ -678,7 +707,6 @@ local function rebase_menu(ctx, ui)
   end
   local state = { autostash = false, rebase_merges = false, autosquash = false,
     interactive = false, update_refs = false, keep_empty = false }
-  local remotes = branch_remotes(ctx)
   local function rebase(extra, target)
     local function execute(ref)
       local args = { 'rebase' }
@@ -731,33 +759,35 @@ local function rebase_menu(ctx, ui)
         value_flag('-S', 'Sign using GPG', state, 'gpg_sign', '--gpg-sign='),
         flag('=s', 'Add Signed-off-by', state, 'signoff', '--signoff'),
       } },
-      { title = 'Actions', actions = {
+      { title = 'Actions', mutation = true, requires = { 'head', 'no_sequence', 'resolved', 'selected', 'rebase_clean' }, actions = {
         { key = 'r', label = 'Rebase onto ' .. short_target(ctx), run = function() rebase() end },
-        { key = 'p', label = 'Rebase onto push remote', run = function()
+        { key = 'p', requires = { 'push_remote', 'rebase_push' }, label = 'Rebase onto push remote', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.push_remote then
             rebase(nil, remotes.push_remote == '.' and remotes.branch
               or remotes.push_remote .. '/' .. remotes.branch)
-          else input('Push remote branch: ', function(ref) rebase(nil, ref) end) end
+          end
         end },
-        { key = 'u', label = 'Rebase onto upstream', run = function()
+        { key = 'u', requires = { 'upstream', 'rebase_upstream' }, label = 'Rebase onto upstream', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.upstream and remotes.merge_ref then
             local branch = remotes.merge_ref:gsub('^refs/heads/', '')
             rebase(nil, remotes.upstream == '.' and branch or remotes.upstream .. '/' .. branch)
-          else input('Upstream ref: ', function(ref) rebase(nil, ref) end) end
+          end
         end },
         { key = 'e', label = 'Rebase onto another ref', run = function()
-          input('Rebase onto: ', function(ref) rebase(nil, ref) end)
+          input(ctx, 'Rebase onto: ', function(ref) rebase(nil, ref) end)
         end },
         { key = 'i', label = 'Interactive rebase',
           run = function() rebase({ '--interactive' }) end },
       } },
     }
   if ctx.commit and (ctx.panel == 'status' or ctx.panel == 'log') then
-    groups[#groups + 1] = { title = 'Commit actions', actions = {
+    groups[#groups + 1] = { title = 'Commit actions', mutation = true, requires = { 'head', 'idle', 'resolved', 'rewrite', 'nonmerge' }, actions = {
       { key = 'w', label = 'Reword commit and descendants',
-        run = function() existing_key('cw') end },
+        source_key = 'cw', run = function() existing_key(ctx, 'cw') end },
       { key = 'd', label = 'Drop commit and rewrite descendants',
-        run = function() existing_key('X') end },
+        source_key = 'X', run = function() existing_key(ctx, 'X') end },
     } }
   end
   return show_submenu({ kind = 'rebase', title = 'Rebase',
@@ -768,7 +798,6 @@ local function rebase_menu(ctx, ui)
 end
 
 local function push_menu(ctx, ui)
-  local remotes = branch_remotes(ctx)
   local selected = selected_transfer(ctx)
   local state = { upstream = false, force_lease = false, tags = false,
     follow_tags = false, dry_run = false, no_verify = false }
@@ -803,48 +832,51 @@ local function push_menu(ctx, ui)
         value_flag('-o', 'Push options (comma separated)', state, 'push_options', '--push-option='),
       } },
       { title = 'Actions', actions = {
-        { key = 'v', label = 'Review range-diff before push', run = function() require('git.features.range_diff').open(ctx.work_tree) end },
+        { key = 'v', requires = { 'head', 'range_diff' },
+          label = 'Review range-diff before push', run = function() require('git.features.range_diff').open(ctx.work_tree) end },
         branch_config_action(ctx),
-        { key = 'p', label = 'Push current to push remote', run = function()
+        { key = 'p', mutation = true, requires = { 'head', 'push_remote' }, label = 'Push current to push remote', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.push_remote then
             push({ remotes.push_remote, 'HEAD:refs/heads/' .. remotes.branch })
-          else push() end
+          end
         end },
-        { key = 'u', label = 'Push current to upstream', run = function()
+        { key = 'u', mutation = true, requires = { 'head', 'upstream' }, label = 'Push current to upstream', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.upstream and remotes.merge_ref then
             push({ remotes.upstream, 'HEAD:' .. remotes.merge_ref })
-          else push() end
+          end
         end },
-        { key = 'e', label = 'Push current elsewhere', run = function()
-          input('Remote: ', function(remote)
-            input('Destination branch: ', function(branch)
+        { key = 'e', mutation = true, requires = { 'head' }, label = 'Push current elsewhere', run = function()
+          input(ctx, 'Remote: ', function(remote)
+            input(ctx, 'Destination branch: ', function(branch)
               push({ remote, 'HEAD:' .. branch })
             end)
           end)
         end },
-        { key = 'o', label = 'Push another ref', run = function()
-          input('Source ref: ', function(source)
-            input('Remote: ', function(remote)
-              input('Destination ref: ', function(target)
+        { key = 'o', mutation = true, label = 'Push another ref', run = function()
+          input(ctx, 'Source ref: ', function(source)
+            input(ctx, 'Remote: ', function(remote)
+              input(ctx, 'Destination ref: ', function(target)
                 push({ remote, source .. ':' .. target })
               end)
             end)
           end, ctx.branch or ctx.commit)
         end },
-        { key = 'r', label = 'Push explicit refspec', run = function()
-          input('Remote: ', function(remote)
-            input('Refspec: ', function(refspec) push({ remote, refspec }) end)
+        { key = 'r', mutation = true, label = 'Push explicit refspec', run = function()
+          input(ctx, 'Remote: ', function(remote)
+            input(ctx, 'Refspec: ', function(refspec) push({ remote, refspec }) end)
           end)
         end },
-        { key = 'm', label = 'Push matching branches', run = function()
-          input('Remote: ', function(remote) push({ remote, ':' }) end)
+        { key = 'm', mutation = true, requires = { 'head' }, label = 'Push matching branches', run = function()
+          input(ctx, 'Remote: ', function(remote) push({ remote, ':' }) end)
         end },
-        { key = 't', label = 'Push all tags', run = function()
-          input('Remote: ', function(remote) push({ remote, '--tags' }) end)
+        { key = 't', mutation = true, requires = { 'tags' }, label = 'Push all tags', run = function()
+          input(ctx, 'Remote: ', function(remote) push({ remote, '--tags' }) end)
         end },
-        { key = 'T', label = 'Push one tag', run = function()
-          input('Remote: ', function(remote)
-            input('Tag: ', function(tag) push({ remote, 'refs/tags/' .. tag }) end,
+        { key = 'T', mutation = true, requires = { 'tags' }, label = 'Push one tag', run = function()
+          input(ctx, 'Remote: ', function(remote)
+            input(ctx, 'Tag: ', function(tag) push({ remote, 'refs/tags/' .. tag }) end,
               ctx.branch_kind == 'tags' and ctx.branch or nil)
           end)
         end },
@@ -853,12 +885,20 @@ local function push_menu(ctx, ui)
   }
   if selected then
     table.insert(spec.groups[2].actions, 1, {
-      key = 's', label = 'Push ' .. short_target(ctx)
-        .. (selected.push_remote and (' to ' .. selected.push_remote) or ' to remote'),
+      key = 's', mutation = true, requires = { 'selected', function(s)
+        local current = selected_transfer(ctx)
+        return current and (not current.push_remote or s:remote(current.push_remote)), 'Selected push remote no longer exists'
+      end }, label = function()
+        local current = selected_transfer(ctx)
+        local remote = current and current.push_remote
+        return 'Push ' .. short_target(ctx) .. (remote and (' to ' .. remote) or ' to remote')
+      end,
       run = function()
+        local selected = selected_transfer(ctx)
+        if not selected then return end
         local function send(remote)
           if selected.kind == 'commit' then
-            input('Destination branch: ', function(branch)
+            input(ctx, 'Destination branch: ', function(branch)
               push({ remote, selected.source .. ':refs/heads/' .. branch })
             end)
           else
@@ -866,7 +906,7 @@ local function push_menu(ctx, ui)
           end
         end
         if selected.push_remote then send(selected.push_remote)
-        else input('Remote: ', send) end
+        else input(ctx, 'Remote: ', send) end
       end,
     })
   end
@@ -874,7 +914,6 @@ local function push_menu(ctx, ui)
 end
 
 local function pull_menu(ctx, ui)
-  local remotes = branch_remotes(ctx)
   local selected = selected_transfer(ctx)
   local state = { rebase = false, ff_only = false, autostash = false, tags = false }
   local function pull(extra)
@@ -905,19 +944,24 @@ local function pull_menu(ctx, ui)
       } },
       { title = 'Actions', actions = {
         branch_config_action(ctx),
-        { key = 'p', label = 'Pull from push remote', run = function()
+        { key = 'p', mutation = true, requires = { 'no_sequence', 'resolved', 'pull_clean', 'push_remote' },
+          label = 'Pull from push remote', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.push_remote then
             pull({ remotes.push_remote, remotes.branch })
-          else pull() end
+          end
         end },
-        { key = 'u', label = 'Pull from upstream', run = function()
+        { key = 'u', mutation = true, requires = { 'no_sequence', 'resolved', 'pull_clean', 'upstream' },
+          label = 'Pull from upstream', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.upstream and remotes.merge_ref then
             pull({ remotes.upstream, remotes.merge_ref })
-          else pull() end
+          end
         end },
-        { key = 'e', label = 'Pull from elsewhere', run = function()
-          input('Remote: ', function(remote)
-            input('Branch: ', function(branch) pull({ remote, branch }) end)
+        { key = 'e', mutation = true, requires = { 'no_sequence', 'resolved', 'pull_clean' },
+          label = 'Pull from elsewhere', run = function()
+          input(ctx, 'Remote: ', function(remote)
+            input(ctx, 'Branch: ', function(branch) pull({ remote, branch }) end)
           end)
         end },
       } },
@@ -925,18 +969,27 @@ local function pull_menu(ctx, ui)
   }
   if selected and selected.kind ~= 'tag' and selected.kind ~= 'commit' then
     table.insert(spec.groups[2].actions, 1, {
-      key = 's', label = (selected.kind == 'local_' and 'Pull upstream of '
+      key = 's', mutation = true, requires = { 'no_sequence', 'resolved', 'pull_clean', 'selected', function(s)
+        local current = selected_transfer(ctx)
+        return current and s:remote(current.pull_remote), 'Selected upstream remote no longer exists'
+      end }, label = (selected.kind == 'local_' and 'Pull upstream of '
         or 'Pull ') .. short_target(ctx) .. ' into HEAD',
-      enabled = not not (selected.pull_remote and selected.pull_ref),
+      enabled = function()
+        local current = selected_transfer(ctx)
+        return current and current.pull_remote ~= nil and current.pull_ref ~= nil,
+          'Selected branch has no configured upstream'
+      end,
       reason = 'Selected branch has no configured upstream',
-      run = function() pull({ selected.pull_remote, selected.pull_ref }) end,
+      run = function()
+        local current = selected_transfer(ctx)
+        if current and current.pull_remote and current.pull_ref then pull({ current.pull_remote, current.pull_ref }) end
+      end,
     })
   end
   return show_submenu(spec, ui)
 end
 
 local function fetch_menu(ctx, ui)
-  local remotes = branch_remotes(ctx)
   local state = { all = false, prune = false, tags = false }
   local function fetch(extra)
     local args = { 'fetch' }
@@ -948,41 +1001,43 @@ local function fetch_menu(ctx, ui)
     if extra then vim.list_extend(args, extra) end
     git(args, ctx)
   end
-  return show_submenu({ kind = 'fetch', title = 'Fetch',
+  return show_submenu({ kind = 'fetch', title = 'Fetch', requires = { 'fetch_arguments' },
     context = 'Repository: ' .. (ctx.work_tree or ''), groups = {
       { title = 'Arguments', actions = {
         flag('-a', 'Fetch all remotes', state, 'all', '--all'),
         flag('-p', 'Prune removed refs', state, 'prune', '--prune'),
         flag('-t', 'Fetch tags', state, 'tags', '--tags'),
-        flag('-u', 'Fetch full history', state, 'unshallow', '--unshallow'),
+        vim.tbl_extend('force', flag('-u', 'Fetch full history', state, 'unshallow', '--unshallow'), { requires = { 'unshallow_option' } }),
         flag('-F', 'Force', state, 'force', '--force'),
       } },
       { title = 'Actions', actions = {
         branch_config_action(ctx),
-        { key = 'f', label = 'Fetch default remote', run = function() fetch() end },
-        { key = 'p', label = 'Fetch push remote', run = function()
+        { key = 'f', mutation = true, requires = { 'default_remote' }, label = 'Fetch default remote', run = function() fetch() end },
+        { key = 'p', mutation = true, requires = { 'push_remote', 'fetch_one' }, label = 'Fetch push remote', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.push_remote then fetch({ remotes.push_remote })
-          else input('Remote: ', function(remote) fetch({ remote }) end) end
+          end
         end },
-        { key = 'u', label = 'Fetch upstream remote', run = function()
+        { key = 'u', mutation = true, requires = { 'upstream_remote', 'fetch_one' }, label = 'Fetch upstream remote', run = function()
+          local remotes = branch_remotes(ctx)
           if remotes and remotes.upstream then fetch({ remotes.upstream })
-          else input('Remote: ', function(remote) fetch({ remote }) end) end
+          end
         end },
-        { key = 'a', label = 'Fetch all remotes', run = function() fetch({ '--all' }) end },
-        { key = 'e', label = 'Fetch elsewhere', run = function()
-          input('Remote: ', function(remote) fetch({ remote }) end)
+        { key = 'a', mutation = true, requires = { 'remotes' }, label = 'Fetch all remotes', run = function() fetch({ '--all' }) end },
+        { key = 'e', mutation = true, requires = { 'fetch_one' }, label = 'Fetch elsewhere', run = function()
+          input(ctx, 'Remote: ', function(remote) fetch({ remote }) end)
         end },
-        { key = 'o', label = 'Fetch another branch', run = function()
-          input('Remote: ', function(remote)
-            input('Branch: ', function(branch) fetch({ remote, branch }) end)
+        { key = 'o', mutation = true, requires = { 'fetch_one' }, label = 'Fetch another branch', run = function()
+          input(ctx, 'Remote: ', function(remote)
+            input(ctx, 'Branch: ', function(branch) fetch({ remote, branch }) end)
           end)
         end },
-        { key = 'r', label = 'Fetch explicit refspec', run = function()
-          input('Remote: ', function(remote)
-            input('Refspec: ', function(refspec) fetch({ remote, refspec }) end)
+        { key = 'r', mutation = true, requires = { 'fetch_one' }, label = 'Fetch explicit refspec', run = function()
+          input(ctx, 'Remote: ', function(remote)
+            input(ctx, 'Refspec: ', function(refspec) fetch({ remote, refspec }) end)
           end)
         end },
-        { key = 'm', label = 'Fetch submodules', run = function()
+        { key = 'm', mutation = true, requires = { 'default_remote' }, label = 'Fetch submodules', run = function()
           fetch({ '--recurse-submodules' })
         end },
       } },
@@ -996,20 +1051,32 @@ function M.open(bufnr, selection)
   if not ctx then
     return false, 'Action menu is available in status, log, branch, reflog, and worktree panels'
   end
+  local function show_root(spec)
+    return menu.show(availability.bind(spec, ctx), { availability = availability.new(ctx), action_context = ctx })
+  end
+  if selection and selection.first and selection.last then
+    ctx.source_selections = {}
+    for row = selection.first, selection.last do
+      ctx.source_selections[#ctx.source_selections + 1] = { row = row,
+        value = require('git.features.action_selection').capture(bufnr, row) }
+    end
+  end
   if selection then
     local diff = require('git.features.commit_diff')
     local count = #selection.values
     if selection.kind == 'commits' then
       ctx.commits = selection.values
       ctx.commit = selection.values[1]
-      return menu.show({ kind = 'root', context = ('%d selected commits'):format(count),
+      return show_root({ kind = 'root', context = ('%d selected commits'):format(count),
         groups = { { title = 'Selected commits', actions = {
           { key = 'd', label = 'Diff selected range', run = function()
             local ok, err = diff.open_selected(ctx.work_tree, ctx.commits)
             if not ok then vim.notify(err, vim.log.levels.WARN) end
           end },
-          { key = 'A', label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
-          { key = 'V', label = 'Revert…', run = function(ui) revert_menu(ctx, ui) end },
+          { key = 'A', requires = { availability.start_or_resume({ 'cherry_pick', 'revert' }) },
+            label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
+          { key = 'V', requires = { availability.start_or_resume({ 'cherry_pick', 'revert' }) },
+            label = 'Revert…', run = function(ui) revert_menu(ctx, ui) end },
           { key = '!', label = 'Custom Git commands…', run = function(ui)
             require('git.features.custom_commands').open(ctx, ui, show_submenu)
           end },
@@ -1020,7 +1087,7 @@ function M.open(bufnr, selection)
       })
     end
     if selection.kind == 'stashes' then
-      return menu.show({ kind = 'root', context = ('%d selected stashes'):format(count),
+      return show_root({ kind = 'root', context = ('%d selected stashes'):format(count),
         groups = { { title = 'Selected stashes', actions = {
           { key = 'd', label = 'Compare stash snapshots', run = function()
             local ok, err = diff.open_stashes(ctx.work_tree, selection.values)
@@ -1043,7 +1110,7 @@ function M.open(bufnr, selection)
       require('git.features.status').refresh_buffer(bufnr)
       utils.fire_git_changed({ work_tree = ctx.work_tree })
     end
-    return menu.show({ kind = 'root', context = ('%d selected %s files'):format(count, ctx.section),
+    return show_root({ kind = 'root', context = ('%d selected %s files'):format(count, ctx.section),
       groups = { { title = 'Selected files', actions = {
         { key = '!', label = 'Custom Git commands…', run = function(ui)
           require('git.features.custom_commands').open(ctx, ui, show_submenu)
@@ -1055,12 +1122,12 @@ function M.open(bufnr, selection)
           local ok, err = diff.open_paths(ctx.work_tree, ctx.paths, ctx.section)
           if not ok then vim.notify(err, vim.log.levels.WARN) end
         end },
-        { key = 's', label = ctx.section == 'staged' and 'Unstage selected files'
+        { key = 's', mutation = true, label = ctx.section == 'staged' and 'Unstage selected files'
           or ctx.section == 'conflicted' and 'Accept selected conflicts'
           or 'Stage selected files', run = function() update('toggle') end },
-        { key = 'u', label = 'Unstage selected files', enabled = ctx.section == 'staged',
+        { key = 'u', mutation = true, label = 'Unstage selected files', enabled = ctx.section == 'staged',
           reason = 'Select staged files', run = function() update('unstage') end },
-        { key = 'D', label = 'Discard selected files', run = function() update('discard') end },
+        { key = 'D', mutation = true, label = 'Discard selected files', run = function() update('discard') end },
       } } },
     })
   end
@@ -1072,52 +1139,60 @@ function M.open(bufnr, selection)
   local groups = {}
   if ctx.panel == 'status' and ctx.path then
     local file_actions = {
-      { key = 's', label = 'Stage / accept', run = function() existing_key('s') end },
-      { key = 'u', label = 'Unstage', run = function() existing_key('u') end },
-      { key = 'D', label = 'Discard', run = function() existing_key('X') end },
+      { key = 's', mutation = true,
+        label = ctx.section == 'staged' and 'Unstage' or ctx.section == 'conflicted' and 'Accept conflict' or 'Stage', source_key = 's',
+        run = function() existing_key(ctx, 's') end },
+      { key = 'u', mutation = true, enabled = ctx.section == 'staged', reason = 'Select staged changes',
+        label = 'Unstage', source_key = 'u', run = function() existing_key(ctx, 'u') end },
+      { key = 'D', mutation = true, label = 'Discard', source_key = 'X', run = function() existing_key(ctx, 'X') end },
     }
     if ctx.section == 'staged' then
-      file_actions[#file_actions + 1] = { key = 'a', label = 'Apply to worktree',
+      file_actions[#file_actions + 1] = { key = 'a', mutation = true, requires = { 'selected', 'patch_source' },
+        label = 'Apply to worktree',
         run = function() apply_patch(ctx, false) end }
     end
     groups[#groups + 1] = { title = 'File: ' .. ctx.path, actions = file_actions }
   elseif ctx.panel == 'status' and ctx.commit then
     groups[#groups + 1] = { title = commit_label(ctx), actions = {
-      { key = 'a', label = 'Apply to worktree',
+      { key = 'a', mutation = true, requires = { 'selected', 'patch_source' }, label = 'Apply to worktree',
         run = function() apply_patch(ctx, false) end },
     } }
   elseif ctx.panel == 'log' and ctx.commit then
     groups[#groups + 1] = { title = commit_label(ctx), actions = {
-      { key = 'o', label = 'Inspect commit', run = function() existing_key('<CR>') end },
-      { key = 'cw', label = 'Reword commit', run = function() existing_key('cw') end },
+      { key = 'o', label = 'Inspect commit', source_key = '<CR>', run = function() existing_key(ctx, '<CR>') end },
+      { key = 'cw', mutation = true, requires = { 'head', 'idle', 'resolved', 'rewrite', 'nonmerge' },
+        label = 'Reword commit', source_key = 'cw', run = function() existing_key(ctx, 'cw') end },
     } }
   elseif ctx.panel == 'branch' and ctx.branch then
     groups[#groups + 1] = { title = 'Ref: ' .. ctx.branch, actions = {
-      { key = 'L', label = 'Log ' .. short_target(ctx), run = function() existing_key('L') end },
+      { key = 'L', label = 'Log ' .. short_target(ctx), source_key = 'L', run = function() existing_key(ctx, 'L') end },
     } }
   elseif ctx.panel == 'reflog' and ctx.commit then
     groups[#groups + 1] = { title = 'Reflog: ' .. ctx.reflog_selector, actions = {
-      { key = 'o', label = 'Inspect destination', run = function() existing_key('<CR>') end },
-      { key = 'b', label = 'Create rescue branch', run = function() existing_key('B') end },
-      { key = 'Y', label = 'Copy reflog selector', run = function() existing_key('y') end },
+      { key = 'o', label = 'Inspect destination', source_key = '<CR>', run = function() existing_key(ctx, '<CR>') end },
+      { key = 'b', mutation = true, requires = { 'selected' },
+        label = 'Create rescue branch', source_key = 'B', run = function() existing_key(ctx, 'B') end },
+      { key = 'Y', label = 'Copy reflog selector', source_key = 'y', run = function() existing_key(ctx, 'y') end },
     } }
   elseif ctx.panel == 'worktree' and ctx.target_worktree then
     groups[#groups + 1] = { title = 'Worktree: ' .. ctx.target_worktree, actions = {
-      { key = 'o', label = 'Open worktree', run = function() existing_key('<CR>') end },
-      { key = 's', label = 'Sync primary to selected HEAD',
-        run = function() existing_key('gs') end },
-      { key = 'D', label = 'Remove worktree', run = function() existing_key('X') end },
-      { key = 'R', label = 'Refresh', run = function() existing_key('R') end },
+      { key = 'o', label = 'Open worktree', source_key = '<CR>', run = function() existing_key(ctx, '<CR>') end },
+      { key = 's', mutation = true, requires = { 'sync_worktree' }, label = 'Sync primary to selected HEAD',
+        source_key = 'gs', run = function() existing_key(ctx, 'gs') end },
+      { key = 'D', mutation = true, requires = { 'linked_worktree' },
+        label = 'Remove worktree', source_key = 'X', run = function() existing_key(ctx, 'X') end },
+      { key = 'R', label = 'Refresh', source_key = 'R', run = function() existing_key(ctx, 'R') end },
     } }
   end
   local operations = {}
   operations[#operations + 1] = { key = 'H', label = 'History…', run = function(ui)
     show_submenu({ kind = 'history', title = 'History', context = 'Repository: ' .. (ctx.work_tree or ''), groups = {
       { title = 'Recovery', actions = {
-        { key = 'u', label = 'Undo last logical operation', run = function()
+        { key = 'u', mutation = true, requires = { 'head', 'idle', 'resolved', 'undo' },
+          label = 'Undo last logical operation', run = function()
           require('git.features.history_undo').open(ctx.work_tree, false)
         end },
-        { key = 'r', label = 'Redo operation', run = function()
+        { key = 'r', mutation = true, requires = { 'head', 'idle', 'resolved', 'redo' }, label = 'Redo operation', run = function()
           require('git.features.history_undo').open(ctx.work_tree, true)
         end },
         { key = 'l', label = 'Inspect reflog', run = function() git({ 'reflog' }, ctx) end },
@@ -1126,27 +1201,30 @@ function M.open(bufnr, selection)
         { key = 'b', label = 'Toggle old rebase base (excluded)', enabled = ctx.commit ~= nil, run = function()
           require('git.features.rebase_plan').mark(ctx.work_tree, ctx.commit)
         end },
-        { key = 'p', label = 'Edit rebase plan', run = function()
+        { key = 'p', requires = { 'head', 'idle', 'resolved' }, label = 'Edit rebase plan', run = function()
           require('git.features.rebase_plan').open(ctx)
         end },
-        { key = 'f', label = 'Find fixup target', run = function()
+        { key = 'f', requires = { 'head', 'idle', 'resolved', 'tracked_changes' }, label = 'Find fixup target', run = function()
           require('git.features.fixup_target').open(ctx)
         end },
-        { key = '<Tab>', label = 'Collect patch and split commit', run = function()
+        { key = '<Tab>', requires = { 'head', 'idle', 'resolved', 'collection' },
+          label = 'Collect patch and split commit', run = function()
           require('git.features.patch_collection').open(ctx)
         end },
       } },
     } }, ui)
   end }
   if ctx.commit then
-    operations[#operations + 1] = { key = '<Tab>', label = 'Collect patch and split commit', run = function()
+    operations[#operations + 1] = { key = '<Tab>', requires = { 'head', 'idle', 'resolved', 'collection' },
+      label = 'Collect patch and split commit', run = function()
       require('git.features.patch_collection').open(ctx)
     end }
   end
   if ctx.panel == 'status' or ctx.panel == 'log' or ctx.panel == 'reflog' then
     vim.list_extend(operations, {
-      { key = 'A', label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
-      { key = 'V', label = 'Revert…',
+      { key = 'A', requires = { availability.start_or_resume({ 'cherry_pick', 'revert' }) },
+        label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
+      { key = 'V', requires = { availability.start_or_resume({ 'cherry_pick', 'revert' }) }, label = 'Revert…',
         run = function(ui) revert_menu(ctx, ui) end },
     })
   end
@@ -1166,12 +1244,14 @@ function M.open(bufnr, selection)
       key = 'b', label = 'Branch…', run = function(ui) branch_menu(ctx, ui) end,
     }
     operations[#operations + 1] = {
-      key = 'r', label = 'Rebase…', run = function(ui) rebase_menu(ctx, ui) end,
+      key = 'r', requires = { 'head', availability.start_or_resume({ 'rebase' }) },
+        label = 'Rebase…', run = function(ui) rebase_menu(ctx, ui) end,
     }
   end
   if ctx.panel == 'status' or ctx.panel == 'branch' then
     vim.list_extend(operations, {
-      { key = 'm', label = 'Merge…', run = function(ui) merge_menu(ctx, ui) end },
+      { key = 'm', requires = { availability.start_or_resume({ 'merge' }) },
+        label = 'Merge…', run = function(ui) merge_menu(ctx, ui) end },
       { key = 'P', label = 'Push…', run = function(ui) push_menu(ctx, ui) end },
       { key = 'F', aliases = { 'p' }, label = 'Pull…',
         run = function(ui) pull_menu(ctx, ui) end },
@@ -1198,7 +1278,7 @@ function M.open(bufnr, selection)
     git = git, show = show_submenu,
   }))
   groups[#groups + 1] = { title = 'Operations', actions = operations }
-  return menu.show({ kind = 'root', columns = 2, groups = groups })
+  return show_root({ kind = 'root', columns = 2, groups = groups })
 end
 
 function M.attach(bufnr)
@@ -1236,7 +1316,7 @@ function M.attach(bufnr)
           if not commit then err = 'Select only commit rows'; break end
           if commits[#commits] ~= commit then commits[#commits + 1] = commit end
         end
-        if not err then selection = { kind = 'commits', values = commits } end
+        if not err then selection = { kind = 'commits', values = commits, first = first, last = last } end
       end
       if not selection then vim.notify(err, vim.log.levels.WARN); return end
       local ok, open_err = M.open(bufnr, selection)

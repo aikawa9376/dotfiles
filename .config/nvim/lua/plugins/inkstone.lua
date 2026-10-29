@@ -14,7 +14,7 @@ return {
     ignore = function(buf)
       return (vim.bo[buf].filetype == 'gitpr' or vim.bo[buf].filetype == 'gitissue') and vim.b[buf].git_pr_markdown_ranges == nil
     end,
-    paragraph = { wrap = false },
+    paragraph = { wrap = true, join = false },
     heading = {
       sign = false,
       position = "inline",
@@ -115,6 +115,7 @@ return {
           code = vim.tbl_extend('force', code_padding, { sign = false }),
         },
         lazyagent = {
+          paragraph = { wrap = false, join = false },
           typography = { enabled = false },
           code = code_padding,
           debounce = 300,

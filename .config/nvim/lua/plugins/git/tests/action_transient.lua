@@ -5,6 +5,27 @@ package.path = plugin .. '/lua/?.lua;' .. package.path
 
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, 'p')
+local function real_git(args)
+  local argv = { 'git', '-C', root }; vim.list_extend(argv, args)
+  local result = vim.system(argv, { text = true }):wait()
+  assert(result.code == 0, result.stderr)
+  return vim.trim(result.stdout)
+end
+real_git({ 'init', '-qb', 'main' })
+real_git({ 'config', 'user.name', 'Fixture' })
+real_git({ 'config', 'user.email', 'fixture@example.invalid' })
+vim.fn.writefile({ 'parent' }, root .. '/tracked.txt')
+real_git({ 'add', 'tracked.txt' })
+real_git({ 'commit', '-qm', 'parent' })
+vim.fn.writefile({ 'selected' }, root .. '/tracked.txt')
+real_git({ 'add', 'tracked.txt' })
+real_git({ 'commit', '-qm', 'selected commit' })
+real_git({ 'branch', 'feature' })
+real_git({ 'worktree', 'add', '--detach', root .. '/other', 'HEAD' })
+real_git({ 'remote', 'add', 'origin', root .. '/remote' })
+real_git({ 'config', 'branch.main.remote', 'origin' })
+real_git({ 'config', 'branch.main.merge', 'refs/heads/main' })
+vim.fn.writefile({ 'untracked change' }, root .. '/untracked.txt')
 local actions = require('git.features.magit_actions')
 local utils = require('git.utils')
 local commands = {}
@@ -37,7 +58,7 @@ local function kind()
   return vim.b[vim.api.nvim_get_current_buf()].git_action_menu_kind
 end
 
-local hash = string.rep('a', 40)
+local hash = real_git({ 'rev-parse', 'HEAD' })
 local status = panel('gitstatus', { hash .. ' selected commit' })
 local help = function() end
 vim.keymap.set('n', 'g?', help, { buffer = status })
@@ -100,7 +121,7 @@ assert(kind() == 'root' and text():find('Commit: ' .. hash:sub(1, 12), 1, true),
   'log menu did not use the commit under cursor')
 assert(not text():find('Git actions', 1, true) and not text():find('log  ' .. hash:sub(1, 7), 1, true),
   'root menu repeated its selected commit in a redundant header')
-assert(vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] == 'Commit: ' .. hash:sub(1, 12),
+assert(vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] == 'Commit: ' .. hash:sub(1, 12) .. ' (selected commit)',
   'root menu did not start with the useful context')
 assert(text():find('Cherry-pick…', 1, true) and text():find('Reset…', 1, true)
   and text():find('Apply variants', 1, true)
@@ -147,7 +168,7 @@ vim.ui.input = function(opts, callback)
 end
 for _, key in ipairs({ '-A', '-F', '-G', '-S', '-L', '-s', '-u', '-o' }) do press(key) end
 vim.ui.input = log_input
-for _, key in ipairs({ '=m', '=p', '-i', '-D', '-r', '=R', '-g', '-c', '-d', '=S' }) do
+for _, key in ipairs({ '=m', '=p', '-i', '-D', '=R', '-g', '-c', '-d', '=S' }) do
   press(key)
 end
 assert(log_row('--author=Alice') and log_row('--no-merges') and log_row('--topo-order')
@@ -159,7 +180,7 @@ press('h')
 assert(vim.deep_equal(require('git.commands').argv(log_opens[#log_opens]), {
   '--max-count=256', '--author=Alice', '--grep=fix', '-G', 'target', '-S', 'needle',
   '-L', '1,2:file.txt', '--since=yesterday', '--until=today', '--first-parent',
-  '--no-merges', '--invert-grep', '--simplify-by-decoration', '--reverse',
+  '--no-merges', '--invert-grep', '--simplify-by-decoration',
   '--topo-order', '--reflog', '--graph', '--color', '--decorate',
   '--show-signature', 'HEAD',
 }), 'log transient did not pass its flags to the log panel')
@@ -289,7 +310,7 @@ assert(vim.iter(ref_marks):any(function(mark)
     and mark[4].end_col == #'Ref: feature'
 end), 'branch operation did not highlight its target')
 press('a')
-assert(patch_calls[#patch_calls].commit == 'feature',
+assert(patch_calls[#patch_calls].commit == 'refs/heads/feature',
   'branch apply variants did not target the selected ref')
 press('<Space><Space>')
 press('b')
@@ -306,7 +327,7 @@ press('m')
 assert(kind() == 'merge')
 press('-f')
 press('m')
-assert(commands[#commands] == 'merge --ff-only feature', 'merge flags were not passed')
+assert(commands[#commands] == 'merge --ff-only refs/heads/feature', 'merge flags were not passed')
 local operation = require('git.features.operation')
 local original_inspect = operation.inspect
 operation.inspect = function() return { kind = 'merge' } end
@@ -334,20 +355,20 @@ assert(kind() == 'rebase')
 press('-A')
 press('-r')
 press('r')
-assert(commands[#commands] == 'rebase --autostash --rebase-merges feature',
+assert(commands[#commands] == 'rebase --autostash --rebase-merges refs/heads/feature',
   'rebase flags were not passed')
 press('<Space><Space>')
 press('P')
 assert(kind() == 'push')
 press('-f')
 press('p')
-assert(commands[#commands] == 'push --force-with-lease', 'push flags were not passed')
+assert(vim.deep_equal(require('git.commands').argv(commands[#commands]), { 'push', '--force-with-lease', 'origin', 'HEAD:refs/heads/main' }), 'push flags were not passed')
 press('<Space><Space>')
 press('p')
 assert(kind() == 'pull')
 press('-r')
 press('p')
-assert(commands[#commands] == 'pull --rebase', 'pull flags were not passed')
+assert(commands[#commands] == 'pull --rebase origin main', 'pull flags were not passed')
 press('<Space><Space>')
 press('f')
 assert(kind() == 'fetch')

@@ -29,6 +29,17 @@ function M.show(spec, opts)
   vim.b[buf].git_action_menu_kind = spec.kind
 
   local rows, lines, headings = {}, {}, {}
+  local action_groups = {}
+  for _, group in ipairs(spec.groups or {}) do
+    for _, action in ipairs(group.actions) do action_groups[action] = group end
+  end
+  local function evaluate(action, check)
+    local enabled, reason = action.enabled, action.reason
+    if type(enabled) == 'function' then enabled, reason = enabled() end
+    if enabled == false then return false, reason end
+    if check then return check(action, action_groups[action]) end
+    return true
+  end
   local win
   local function available_width()
     if (opts.layout or layout()) == 'float' then return math.max(vim.o.columns - 4, 1) end
@@ -59,16 +70,18 @@ function M.show(spec, opts)
     lines, rows, headings = {}, {}, {}
     -- Width measurement, painting, and highlights must use the same snapshot.
     local snapshots = {}
+    local check = opts.availability and opts.availability(spec)
     local function snapshot(action)
       if not snapshots[action] then
         local state = action.state and action.state() or nil
-        local marker = action.enabled == false and '·'
+        local enabled = evaluate(action, check)
+        local marker = not enabled and '·'
           or (action.marker and action.marker(state))
           or (state == nil and ' ' or state and '✓' or '○')
         local label = type(action.label) == 'function' and action.label() or action.label
         local value = ('%s %s %s'):format(marker, action.key, label)
         snapshots[action] = { text = value, width = vim.fn.strdisplaywidth(value),
-          active = state, key_offset = #marker + 1 }
+          active = state, enabled = enabled, key_offset = #marker + 1 }
       end
       return snapshots[action]
     end
@@ -196,7 +209,7 @@ function M.show(spec, opts)
     for row, cells in pairs(rows) do
       for _, cell in ipairs(cells) do
         local action = cell.action
-        if action.enabled == false then
+        if not snapshot(action).enabled then
           vim.api.nvim_buf_set_extmark(buf, ns, row - 1, cell.start_col,
             { end_col = cell.end_col, hl_group = 'Comment' })
         elseif snapshot(action).active then
@@ -217,7 +230,7 @@ function M.show(spec, opts)
               { end_col = end_col, hl_group = 'DiagnosticOk' })
           end
         end
-        if action.enabled ~= false then
+        if snapshot(action).enabled then
           local cell_text = lines[row]:sub(cell.start_col + 1, cell.end_col)
           local key_offset = snapshot(action).key_offset
           if cell_text:sub(key_offset + 1, key_offset + #action.key) == action.key then
@@ -277,17 +290,43 @@ function M.show(spec, opts)
 
   local resize_group = vim.api.nvim_create_augroup('git_transient_menu_resize_' .. buf, { clear = true })
   local resize_pending = false
+  local function schedule_render()
+    if resize_pending then return end
+    resize_pending = true
+    vim.schedule(function()
+      resize_pending = false
+      render()
+    end)
+  end
   vim.api.nvim_create_autocmd({ 'VimResized', 'WinResized' }, {
     group = resize_group,
-    callback = function()
-      if resize_pending then return end
-      resize_pending = true
-      vim.schedule(function()
-        resize_pending = false
-        render()
-      end)
-    end,
+    callback = schedule_render,
   })
+  if opts.availability then
+    vim.api.nvim_create_autocmd('User', {
+      group = resize_group, pattern = 'GitChanged', callback = schedule_render,
+    })
+    vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter' }, {
+      group = resize_group, callback = schedule_render,
+    })
+    vim.api.nvim_create_autocmd({ 'TextChanged', 'BufWritePost', 'BufWipeout' }, {
+      group = resize_group, buffer = source_buf, callback = schedule_render,
+    })
+    -- Status/log enrichment can replace a noncurrent buffer without TextChanged.
+    -- Clear the subscription's only menu reference on wipe; its next event
+    -- detaches just this Lua listener without disturbing the panel's listeners.
+    local subscription = { schedule = schedule_render }
+    vim.api.nvim_buf_attach(source_buf, false, {
+      on_lines = function()
+        if not subscription.schedule then return true end
+        subscription.schedule()
+      end,
+    })
+    vim.api.nvim_create_autocmd('BufWipeout', {
+      group = resize_group, buffer = buf, once = true,
+      callback = function() subscription.schedule = nil end,
+    })
+  end
   vim.api.nvim_create_autocmd('BufWipeout', {
     group = resize_group, buffer = buf, once = true,
     callback = function() vim.api.nvim_del_augroup_by_id(resize_group) end,
@@ -298,10 +337,16 @@ function M.show(spec, opts)
     if vim.api.nvim_win_is_valid(source_win) then vim.api.nvim_set_current_win(source_win) end
   end
   local function execute(action)
-    if action.enabled == false then
-      vim.notify(action.reason or 'Action is unavailable here', vim.log.levels.WARN)
-      return
+    local function validate()
+      local check = opts.availability and opts.availability(spec)
+      local enabled, reason = evaluate(action, check)
+      if not enabled then
+        render()
+        vim.notify(reason or 'Action is unavailable here', vim.log.levels.WARN)
+      end
+      return enabled
     end
+    if not validate() then return end
     if not action.keep_open then
       if remember then remember(true) end
       close()
@@ -309,6 +354,8 @@ function M.show(spec, opts)
     if action.run then action.run({
       source_win = source_win, source_buf = source_buf,
       layout = opts.layout or layout(), render = render, close = close,
+      availability = opts.availability, validate = validate,
+      action_context = opts.action_context,
     }) end
   end
   vim.keymap.set('n', 'q', close, { buffer = buf, nowait = true, silent = true })

@@ -2,6 +2,7 @@
 local M = {}
 local configured = {}
 local workflow = require('git.features.workflow')
+local availability = require('git.features.magit_availability')
 function M.setup(entries)
   local seen, result = {}, {}
   for _, entry in ipairs(entries or {}) do
@@ -26,6 +27,7 @@ local function substitute(text, vars)
   end))
 end
 function M.execute(entry, ctx)
+  if not availability.valid(ctx, true) then return end
   local vars = { commit = ctx.commit, branch = ctx.branch, path = ctx.path,
     ref = ctx.branch or ctx.commit, worktree = ctx.work_tree }
   local function fail(err) vim.notify(tostring(err), vim.log.levels.WARN) end
@@ -46,10 +48,13 @@ function M.execute(entry, ctx)
     local uses_editor = entry.editor == true or (entry.editor ~= false and vim.tbl_contains({
       'commit', 'merge', 'rebase', 'cherry-pick', 'revert', 'am', 'subtree', 'notes', 'tag', '-c',
     }, args[1]))
-    local function run() workflow.run(ctx.work_tree, args, { mutation = entry.mutation ~= false,
-      editor = uses_editor, output = entry.output ~= false, title = entry.label }) end
+    local function run()
+      if not availability.valid(ctx, true) then return end
+      workflow.run(ctx.work_tree, args, { mutation = entry.mutation ~= false,
+        editor = uses_editor, output = entry.output ~= false, title = entry.label })
+    end
     if entry.confirm then
-      vim.ui.select({ 'Proceed', 'Cancel' }, { prompt = entry.label .. ': git ' .. table.concat(vim.tbl_map(vim.fn.shellescape, args), ' ') },
+      availability.select(ctx, { 'Proceed', 'Cancel' }, { prompt = entry.label .. ': git ' .. table.concat(vim.tbl_map(vim.fn.shellescape, args), ' ') },
         function(choice) if choice == 'Proceed' then run() end end)
     else run() end
   end
@@ -57,11 +62,11 @@ function M.execute(entry, ctx)
     local spec = (entry.inputs or {})[at]
     if not spec then execute(); return end
     local function answer(text) if text ~= nil and text ~= '' then vars[spec.name] = text; input(at + 1) end end
-    if spec.choices then vim.ui.select(spec.choices, { prompt = spec.prompt or spec.name }, answer)
+    if spec.choices then availability.select(ctx, spec.choices, { prompt = spec.prompt or spec.name }, answer)
     else
       local ok, default = pcall(substitute, spec.default or '', vars)
       if not ok then fail(default); return end
-      vim.ui.input({ prompt = (spec.prompt or spec.name) .. ': ', default = default }, answer)
+      availability.input(ctx, { prompt = (spec.prompt or spec.name) .. ': ', default = default }, answer)
     end
   end
   -- Resolve fallback branch only if a template uses it. Detached HEAD has no branch.
@@ -70,14 +75,33 @@ function M.execute(entry, ctx)
   for _, spec in ipairs(entry.inputs or {}) do if (spec.default or ''):find('{branch}', 1, true) then needs_branch = true end end
   if needs_branch and not vars.branch then
     workflow.run(ctx.work_tree, { 'symbolic-ref', '--quiet', '--short', 'HEAD' }, { mutation = false,
-      callback = function(ok, result) if ok then vars.branch = vim.trim(result); input(1) else fail('No branch is selected and HEAD is detached') end end })
+      callback = availability.callback(ctx, function(ok, result)
+        if ok then vars.branch = vim.trim(result); input(1)
+        else fail('No branch is selected and HEAD is detached') end
+      end) })
   else input(1) end
 end
 function M.open(ctx, ui, show)
   local actions = {}
   for _, entry in ipairs(configured) do
     if not entry.panels or vim.tbl_contains(entry.panels, ctx.panel) then
-      actions[#actions + 1] = { key = entry.key, label = entry.label, run = function() M.execute(entry, ctx) end }
+      actions[#actions + 1] = { key = entry.key, label = entry.label, mutation = entry.mutation ~= false,
+        requires = { function(s)
+          local vars = { commit = ctx.commit, branch = ctx.branch or s:branch(), path = ctx.path,
+            paths = ctx.paths or (ctx.path and { ctx.path }), commits = ctx.commits or (ctx.commit and { ctx.commit }),
+            ref = ctx.branch or ctx.commit, worktree = ctx.work_tree }
+          local texts = vim.deepcopy(entry.args)
+          for _, input in ipairs(entry.inputs or {}) do
+            if input.default then texts[#texts + 1] = input.default end
+            vars[input.name] = true
+          end
+          for _, text in ipairs(texts) do
+            for name in text:gmatch('{([%w_]+)}') do
+              if vars[name] == nil then return false, 'No value for {' .. name .. '}' end
+            end
+          end
+          return true
+        end }, run = function() M.execute(entry, ctx) end }
     end
   end
   if #actions == 0 then

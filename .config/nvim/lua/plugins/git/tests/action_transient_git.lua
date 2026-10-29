@@ -119,6 +119,10 @@ assert(vim.fn.readfile(root .. '/file.txt')[2] == 'edited'
   and git({ 'stash', 'list' }) == '', 'stash pop did not restore the worktree')
 vim.ui.input = original_input
 
+git({ 'remote', 'add', 'origin', root })
+git({ 'remote', 'add', 'backup', root })
+git({ 'update-ref', 'refs/remotes/origin/main', hash })
+git({ 'update-ref', 'refs/remotes/backup/main', hash })
 git({ 'config', 'branch.main.remote', 'origin' })
 git({ 'config', 'branch.main.merge', 'refs/heads/main' })
 git({ 'config', 'branch.main.pushRemote', 'backup' })
@@ -145,7 +149,6 @@ git({ 'branch', 'feature' })
 git({ 'config', 'branch.feature.remote', 'origin' })
 git({ 'config', 'branch.feature.merge', 'refs/heads/topic' })
 git({ 'config', 'branch.feature.pushRemote', 'backup' })
-git({ 'remote', 'add', 'origin', root })
 git({ 'update-ref', 'refs/remotes/origin/topic', hash })
 local branch = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(branch, 0, -1, false, { 'feature', 'origin/topic' })
@@ -191,6 +194,7 @@ assert(vim.deep_equal(sent, { 'push', 'origin', hash .. ':refs/heads/saved-commi
 vim.ui.input = original_input
 vim.api.nvim_buf_set_lines(status, 0, -1, false, { ' M file.txt' })
 vim.api.nvim_buf_delete(branch, { force = true })
+git({ 'restore', '--worktree', '--', 'file.txt' })
 press('<Space><Space>')
 press('r')
 press('p')

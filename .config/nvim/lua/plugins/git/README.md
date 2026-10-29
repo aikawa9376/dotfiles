@@ -64,6 +64,19 @@ relative dates, background commit statistics, or shelf labels can refresh
 without cancelling the action. A different target in the captured row is
 rejected; file and hunk rows retain strict text checks.
 
+The Magit menu (`<Space><Space>`) dims actions whose local prerequisites are
+missing and explains the reason when selected. The same rules run when drawing,
+when executing, and after an input or selection prompt. Git changes and source
+panel updates refresh the menu; flags and presets also update availability.
+Checks cover HEAD, the index and conflicts, active sequences, branch kind and
+worktree occupation, configured transfer destinations, patch sources, and
+workflow-specific arguments. A missing upstream never falls back to an unnamed
+Push/Pull destination; use the explicit elsewhere actions to enter a target.
+Key-backed actions validate the captured source item and require its registered
+buffer mapping. Ref targets retain their local/remote/tag namespace.
+Git still validates patch overlap, remote state, permissions, and hooks when an
+operation runs.
+
 Branch actions use `coo` checkout, `cod` duplicate, `cos` spin-off, `coS` spin-out,
 `cou` set upstream, and `coU` unset upstream. Rename uses `cw`; removal uses `X`.
 Worktree actions use `cZa` add, `cZt` create from a Branch row, and `cZs` sync

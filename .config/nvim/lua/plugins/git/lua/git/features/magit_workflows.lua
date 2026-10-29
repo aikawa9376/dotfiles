@@ -1,15 +1,20 @@
 -- Less frequent Magit-style workflows share the existing transient UI.
 local M = {}
 local workflow = require('git.features.workflow')
+local availability = require('git.features.magit_availability')
+local function run_workflow(ctx, args, opts)
+  if not availability.valid(ctx, true) then return end
+  return workflow.run(ctx.work_tree, args, opts)
+end
 local options = require('git.features.transient_options')
 local flag, value = options.flag, options.value
-local function prompt(label, cb, default)
-  vim.ui.input({ prompt = label, default = default }, function(text)
+local function prompt(ctx, label, cb, default)
+  availability.input(ctx, { prompt = label, default = default }, function(text)
     if text and text:find('%S') then cb(text) end
   end)
 end
-local function confirm(label, cb)
-  vim.ui.select({ 'Proceed', 'Cancel' }, { prompt = label }, function(choice) if choice == 'Proceed' then cb() end end)
+local function confirm(ctx, label, cb)
+  availability.select(ctx, { 'Proceed', 'Cancel' }, { prompt = label }, function(choice) if choice == 'Proceed' then cb() end end)
 end
 local function words(text)
   local ok, args = pcall(require('git.commands').argv, text)
@@ -17,7 +22,7 @@ local function words(text)
   return args
 end
 local function file(ctx, label, cb, default)
-  prompt(label, function(path) cb(workflow.path(ctx.work_tree, path)) end, default or ctx.path)
+  prompt(ctx, label, function(path) cb(workflow.path(ctx.work_tree, path)) end, default or ctx.path)
 end
 local function add_flags(args, state, mapping)
   for _, pair in ipairs(mapping) do if state[pair[1]] then args[#args + 1] = pair[2] end end
@@ -37,10 +42,10 @@ function M.sparse(ctx, ui, show)
     if paths then
       vim.list_extend(args, { '--' }); vim.list_extend(args, paths)
     end
-    workflow.run(ctx.work_tree, args)
+    run_workflow(ctx, args)
   end
   local function directories(action)
-    prompt('Directories / patterns (quote paths with spaces): ', function(text)
+    prompt(ctx, 'Directories / patterns (quote paths with spaces): ', function(text)
       local paths = words(text)
       if paths and #paths > 0 then run(action, paths) end
     end, ctx.path and vim.fn.shellescape(vim.fs.dirname(ctx.path)) or nil)
@@ -51,13 +56,18 @@ function M.sparse(ctx, ui, show)
       flag('-s', 'Sparse index', state, 'index', '--sparse-index'),
     } },
     { title = 'Actions', actions = {
-      { key = 'e', label = 'Enable / restore previous selection', run = function() run('init') end },
-      { key = 's', label = 'Set directories / patterns', run = function() directories('set') end },
-      { key = 'a', label = 'Add directories / patterns', run = function() directories('add') end },
-      { key = 'r', label = 'Reapply', run = function() run('reapply') end },
-      { key = 'd', label = 'Disable (full checkout)', run = function() run('disable') end },
-      { key = 'l', label = 'List current selection', run = function()
-        workflow.run(ctx.work_tree, { 'sparse-checkout', 'list' }, { mutation = false, output = true })
+      { key = 'e', mutation = true, requires = { 'no_sequence', 'resolved', 'sparse_arguments' },
+        label = 'Enable / restore previous selection', run = function() run('init') end },
+      { key = 's', mutation = true, requires = { 'no_sequence', 'resolved', 'sparse_arguments' },
+        label = 'Set directories / patterns', run = function() directories('set') end },
+      { key = 'a', mutation = true, requires = { 'sparse', 'no_sequence', 'resolved' },
+        label = 'Add directories / patterns', run = function() directories('add') end },
+      { key = 'r', mutation = true, requires = { 'sparse', 'no_sequence', 'resolved', 'sparse_arguments' },
+        label = 'Reapply', run = function() run('reapply') end },
+      { key = 'd', mutation = true, requires = { 'sparse', 'no_sequence', 'resolved' },
+        label = 'Disable (full checkout)', run = function() run('disable') end },
+      { key = 'l', requires = { 'sparse' }, label = 'List current selection', run = function()
+        run_workflow(ctx, { 'sparse-checkout', 'list' }, { mutation = false, output = true })
       end },
     } },
   } }, ui)
@@ -80,18 +90,18 @@ function M.subtree(ctx, ui, show)
         end
         local function execute(extra)
           vim.list_extend(args, extra)
-          workflow.run(ctx.work_tree, args, { editor = true, output = action == 'split',
+          run_workflow(ctx, args, { editor = true, output = action == 'split',
             mutation = action ~= 'split' or state.rejoin or state.branch ~= nil })
         end
         if action == 'add' or action == 'pull' or action == 'push' then
-          prompt('Subtree repository / remote: ', function(remote)
-            prompt(action == 'push' and 'Destination refspec: ' or 'Subtree revision: ', function(ref)
+          prompt(ctx, 'Subtree repository / remote: ', function(remote)
+            prompt(ctx, action == 'push' and 'Destination refspec: ' or 'Subtree revision: ', function(ref)
               execute({ remote, ref })
             end)
           end)
-        else prompt('Subtree commit: ', function(ref) execute({ ref }) end, ctx.commit or 'HEAD') end
+        else prompt(ctx, 'Subtree commit: ', function(ref) execute({ ref }) end, ctx.commit or 'HEAD') end
       end
-      if state.prefix then prefix(state.prefix) else prompt('Subtree prefix: ', prefix, ctx.path) end
+      if state.prefix then prefix(state.prefix) else prompt(ctx, 'Subtree prefix: ', prefix, ctx.path) end
     end
     local arguments = { value('-P', 'Prefix', state, 'prefix', '--prefix=') }
     if export then
@@ -107,8 +117,9 @@ function M.subtree(ctx, ui, show)
       value('-m', 'Merge message', state, 'message', '--message='),
     }) end
     local actions = export and {
-      { key = 'p', label = 'Push subtree', run = function() run('push') end },
-      { key = 's', label = 'Split subtree', run = function() run('split') end },
+      { key = 'p', mutation = true, label = 'Push subtree', run = function() run('push') end },
+      { key = 's', mutation = function(s) return s:option('rejoin') or s:option('branch') ~= nil end,
+        label = 'Split subtree', run = function() run('split') end },
     } or {
       { key = 'a', label = 'Add from repository', run = function() run('add') end },
       { key = 'c', label = 'Add existing commit', run = function() run('add-commit') end },
@@ -119,18 +130,21 @@ function M.subtree(ctx, ui, show)
     local original = actions[export and 1 or 2]
     if not export then original.run = function()
       local function prefix(path)
-        prompt('Subtree commit: ', function(ref)
+        prompt(ctx, 'Subtree commit: ', function(ref)
           local args = { 'subtree', 'add', '--prefix=' .. path }
           if state.squash then args[#args + 1] = '--squash' end
           if state.message then args[#args + 1] = '--message=' .. state.message end
           args[#args + 1] = ref
-          workflow.run(ctx.work_tree, args, { editor = true })
+          run_workflow(ctx, args, { editor = true })
         end, ctx.commit)
       end
-      if state.prefix then prefix(state.prefix) else prompt('Subtree prefix: ', prefix, ctx.path) end
+      if state.prefix then prefix(state.prefix) else prompt(ctx, 'Subtree prefix: ', prefix, ctx.path) end
     end end
     return show({ kind = export and 'subtree-export' or 'subtree-import', title = export and 'Export subtree' or 'Import subtree',
-      groups = { { title = 'Arguments', actions = arguments }, { title = 'Actions', actions = actions } } }, origin)
+      groups = { { title = 'Arguments', actions = arguments }, { title = 'Actions', mutation = not export,
+        requires = export and { 'startpoint', 'selected', function(s)
+          return not s:option('rejoin') or (not s:staged() and not s:unstaged()), 'Subtree rejoin requires clean tracked files'
+        end } or { 'head', 'no_sequence', 'resolved', 'tracked_clean' }, actions = actions } } }, origin)
   end
   return show({ kind = 'subtree', title = 'Subtree', groups = { { title = 'Actions', actions = {
     { key = 'i', label = 'Import subtree', run = function(origin) submenu(false, origin) end },
@@ -146,26 +160,26 @@ function M.bundle(ctx, ui, show)
       value('-r', 'Revision arguments', state, 'revisions', ''),
     } },
     { title = 'Actions', actions = {
-      { key = 'c', label = 'Create bundle', run = function()
+      { key = 'c', requires = { 'bundle_source' }, label = 'Create bundle', run = function()
         file(ctx, 'New bundle file: ', function(path)
           local revisions = state.revisions and words(state.revisions) or { state.all and '--all' or 'HEAD' }
           if not revisions then return end
           local args = { 'bundle', 'create', path }; vim.list_extend(args, revisions)
-          workflow.run(ctx.work_tree, args, { mutation = false, new_file = path })
+          run_workflow(ctx, args, { mutation = false, new_file = path })
         end, 'repository.bundle')
       end },
       { key = 'v', label = 'Verify prerequisites', run = function()
-        file(ctx, 'Bundle file: ', function(path) workflow.run(ctx.work_tree, { 'bundle', 'verify', path }, { mutation = false, output = true, include_stderr = true }) end)
+        file(ctx, 'Bundle file: ', function(path) run_workflow(ctx, { 'bundle', 'verify', path }, { mutation = false, output = true, include_stderr = true }) end)
       end },
       { key = 'l', label = 'List bundled refs', run = function()
-        file(ctx, 'Bundle file: ', function(path) workflow.run(ctx.work_tree, { 'bundle', 'list-heads', path }, { mutation = false, output = true }) end)
+        file(ctx, 'Bundle file: ', function(path) run_workflow(ctx, { 'bundle', 'list-heads', path }, { mutation = false, output = true }) end)
       end },
-      { key = 'u', label = 'Unbundle objects (keep refs)', run = function()
-        file(ctx, 'Bundle file: ', function(path) workflow.run(ctx.work_tree, { 'bundle', 'unbundle', path }, { output = true }) end)
+      { key = 'u', mutation = true, label = 'Unbundle objects (keep refs)', run = function()
+        file(ctx, 'Bundle file: ', function(path) run_workflow(ctx, { 'bundle', 'unbundle', path }, { output = true }) end)
       end },
-      { key = 'f', label = 'Fetch bundled ref', run = function()
+      { key = 'f', mutation = true, label = 'Fetch bundled ref', run = function()
         file(ctx, 'Bundle file: ', function(path)
-          prompt('Source:destination refspec: ', function(ref) workflow.run(ctx.work_tree, { 'fetch', path, ref }, { editor = true }) end)
+          prompt(ctx, 'Source:destination refspec: ', function(ref) run_workflow(ctx, { 'fetch', path, ref }, { editor = true }) end)
         end)
       end },
     } },
@@ -186,13 +200,13 @@ function M.patch(ctx, ui, show)
         if state.number then args[#args + 1] = '--start-number=' .. state.number end
         if state.prefix then args[#args + 1] = '--subject-prefix=' .. state.prefix end
         vim.list_extend(args, revisions)
-        workflow.run(ctx.work_tree, args, { mutation = false, output = true })
+        run_workflow(ctx, args, { mutation = false, output = true })
       end
       if state.range then local revisions = words(state.range); if revisions then execute(revisions) end
       elseif ctx.commits then
         local revisions = { '--no-walk=unsorted' }; vim.list_extend(revisions, vim.deepcopy(ctx.commits)); execute(revisions)
       elseif ctx.commit then execute({ '-1', ctx.commit })
-      else prompt('Commit range (base..HEAD): ', function(range) local revisions = words(range); if revisions then execute(revisions) end end) end
+      else prompt(ctx, 'Commit range (base..HEAD): ', function(range) local revisions = words(range); if revisions then execute(revisions) end end) end
     end, 'patches')
   end
   return show({ kind = 'patch', title = 'Plain patches', groups = {
@@ -205,15 +219,18 @@ function M.patch(ctx, ui, show)
       value('-n', 'Starting number', state, 'number', '--start-number=', function(text) return text:match('^%d+$') ~= nil end),
     } },
     { title = 'Actions', actions = {
-      { key = 'c', label = 'Create commit patches', run = format },
-      { key = 's', label = 'Save selected / current diff', run = function()
+      { key = 'c', requires = { 'selected' }, label = 'Create commit patches', run = format },
+      { key = 's', requires = { 'selected' }, label = 'Save selected / current diff', run = function()
         file(ctx, 'New patch file: ', function(path)
           local args
           if ctx.commit then args = { 'show', '--format=', '--binary', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', ctx.commit }
-          else args = { 'diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/' }; if ctx.section == 'staged' then args[#args + 1] = '--cached' end end
+          else
+            args = { 'diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/' }
+            if ctx.section == 'staged' then args[#args + 1] = '--cached' end
+          end
           if ctx.paths then table.insert(args, 1, '--literal-pathspecs'); args[#args + 1] = '--'; vim.list_extend(args, ctx.paths)
           elseif ctx.path then table.insert(args, 1, '--literal-pathspecs'); vim.list_extend(args, { '--', ctx.path }) end
-          workflow.run(ctx.work_tree, args, { mutation = false, output_file = path, success = 'Patch saved: ' .. path })
+          run_workflow(ctx, args, { mutation = false, output_file = path, success = 'Patch saved: ' .. path })
         end, 'changes.patch')
       end },
       { key = 'a', label = 'Apply plain patch', run = function(origin) M.apply(ctx, origin, show) end },
@@ -231,10 +248,10 @@ function M.apply(ctx, ui, show)
       if state.whitespace then args[#args + 1] = '--whitespace=' .. state.whitespace end
       if check then args[#args + 1] = '--check' end
       vim.list_extend(args, { '--', path })
-      workflow.run(ctx.work_tree, args, { mutation = not check, success = check and 'Patch can be applied' or nil })
+      run_workflow(ctx, args, { mutation = not check, success = check and 'Patch can be applied' or nil })
     end)
   end
-  return show({ kind = 'patch-apply', title = 'Apply plain patch', groups = {
+  return show({ kind = 'patch-apply', title = 'Apply plain patch', requires = { 'patch_arguments' }, groups = {
     { title = 'Arguments', actions = {
       flag('-i', 'Also update index', state, 'index', '--index', 'cached'),
       flag('-c', 'Index only', state, 'cached', '--cached', 'index'),
@@ -244,7 +261,7 @@ function M.apply(ctx, ui, show)
       value('-w', 'Whitespace handling', state, 'whitespace', '--whitespace=', options.choices({ 'nowarn', 'warn', 'fix', 'error', 'error-all' }, 'Whitespace handling')),
     } },
     { title = 'Actions', actions = {
-      { key = 'a', label = 'Apply patch', run = function() apply(false) end },
+      { key = 'a', mutation = true, requires = { 'resolved' }, label = 'Apply patch', run = function() apply(false) end },
       { key = 'c', label = 'Check applicability', run = function() apply(true) end },
     } },
   } }, ui)
@@ -253,13 +270,17 @@ end
 function M.am(ctx, ui, show)
   local operation = require('git.features.operation').inspect(ctx.work_tree)
   if operation and operation.kind == 'am' then
-    local function run(action) workflow.run(ctx.work_tree, { 'am', '--' .. action }, { editor = true }) end
-    return show({ kind = 'am', title = 'Apply mail patches', groups = { { title = 'Sequence in progress', actions = {
-      { key = 'w', label = 'Continue after resolving / staging', run = function() run('continue') end },
-      { key = 's', label = 'Skip current patch', run = function() confirm('Skip this mail patch?', function() run('skip') end) end },
-      { key = 'a', label = 'Abort mail patch sequence', run = function() confirm('Abort mail patch sequence and restore original history?', function() run('abort') end) end },
+    local function run(action) run_workflow(ctx, { 'am', '--' .. action }, { editor = true }) end
+    return show({ kind = 'am', title = 'Apply mail patches', requires = { availability.operation('am') }, groups = { { title = 'Sequence in progress', actions = {
+      { key = 'w', mutation = true, requires = { 'resolved' },
+        label = 'Continue after resolving / staging', run = function() run('continue') end },
+      { key = 's', mutation = true,
+        label = 'Skip current patch', run = function() confirm(ctx, 'Skip this mail patch?', function() run('skip') end) end },
+      { key = 'a', mutation = true,
+        label = 'Abort mail patch sequence',
+        run = function() confirm(ctx, 'Abort mail patch sequence and restore original history?', function() run('abort') end) end },
       { key = 'p', label = 'Inspect current mail patch', run = function()
-        workflow.run(ctx.work_tree, { 'am', '--show-current-patch=raw' }, { mutation = false, output = true })
+        run_workflow(ctx, { 'am', '--show-current-patch=raw' }, { mutation = false, output = true })
       end },
     } } } }, ui)
   end
@@ -270,10 +291,10 @@ function M.am(ctx, ui, show)
       add_flags(args, state, { { 'threeway', '--3way' }, { 'signoff', '--signoff' }, { 'keep', '--keep' },
         { 'cr', '--keep-cr' }, { 'scissors', '--scissors' }, { 'date', '--committer-date-is-author-date' } })
       vim.list_extend(args, { '--' }); vim.list_extend(args, paths)
-      workflow.run(ctx.work_tree, args, { editor = true })
+      run_workflow(ctx, args, { editor = true })
     end
     if maildir then file(ctx, 'Maildir directory: ', function(path) execute({ path }) end)
-    else prompt('Patch / mbox files (quote paths with spaces): ', function(text)
+    else prompt(ctx, 'Patch / mbox files (quote paths with spaces): ', function(text)
       local paths = words(text); if not paths or #paths == 0 then return end
       for i, path in ipairs(paths) do paths[i] = workflow.path(ctx.work_tree, path) end
       execute(paths)
@@ -289,8 +310,10 @@ function M.am(ctx, ui, show)
       flag('-d', 'Use author date as committer date', state, 'date', '--committer-date-is-author-date'),
     } },
     { title = 'Actions', actions = {
-      { key = 'w', label = 'Apply patch / mbox files', run = function() apply(false) end },
-      { key = 'm', label = 'Apply Maildir', run = function() apply(true) end },
+      { key = 'w', mutation = true, requires = { 'no_sequence', 'resolved' },
+        label = 'Apply patch / mbox files', run = function() apply(false) end },
+      { key = 'm', mutation = true, requires = { 'no_sequence', 'resolved' },
+        label = 'Apply Maildir', run = function() apply(true) end },
       { key = 'a', label = 'Apply plain patch without commit', run = function(origin) M.apply(ctx, origin, show) end },
     } },
   } }, ui)
@@ -305,19 +328,19 @@ function M.notes(ctx, ui, show)
   local function selected(action)
     local function run(commit)
       local argv = args(action); argv[#argv + 1] = commit
-      workflow.run(ctx.work_tree, argv, { editor = action == 'edit', mutation = action ~= 'show', output = action == 'show' })
+      run_workflow(ctx, argv, { editor = action == 'edit', mutation = action ~= 'show', output = action == 'show' })
     end
-    if ctx.commit then run(ctx.commit) else prompt('Commit for note: ', run, 'HEAD') end
+    if ctx.commit then run(ctx.commit) else prompt(ctx, 'Commit for note: ', run, 'HEAD') end
   end
   local function sync(fetch)
-    prompt('Notes remote: ', function(remote)
-      prompt('Notes ref to synchronize: ', function(ref)
+    prompt(ctx, 'Notes remote: ', function(remote)
+      prompt(ctx, 'Notes ref to synchronize: ', function(ref)
         if not ref:match('^refs/notes/.+') or ref:find('*', 1, true) then
           vim.notify('Use one explicit refs/notes/<name> reference', vim.log.levels.WARN); return
         end
         local incoming = 'refs/notes/incoming/' .. ref:sub(12)
         local argv = { fetch and 'fetch' or 'push', remote, ref .. ':' .. (fetch and incoming or ref) }
-        workflow.run(ctx.work_tree, argv, { editor = true,
+        run_workflow(ctx, argv, { editor = true,
           success = fetch and ('Fetched notes into ' .. incoming .. '; merge with T m when ready') or nil })
       end, state.ref or 'refs/notes/commits')
     end, 'origin')
@@ -325,23 +348,30 @@ function M.notes(ctx, ui, show)
   local git_dir = require('git.utils').get_git_dir(ctx.work_tree)
   local merging = git_dir and vim.fn.filereadable(git_dir .. '/NOTES_MERGE_REF') == 1
   local actions = {
-    { key = 'T', label = 'Edit note', run = function() selected('edit') end },
-    { key = 's', label = 'Show note', run = function() selected('show') end },
-    { key = 'r', label = 'Remove note', run = function() confirm('Remove note for selected commit?', function() selected('remove') end) end },
-    { key = 'p', label = 'Prune unreachable notes', run = function() confirm('Prune notes for unreachable commits?', function() workflow.run(ctx.work_tree, args('prune')) end) end },
-    { key = 'm', label = 'Merge another notes ref', run = function()
-      prompt('Notes ref to merge: ', function(ref)
+    { key = 'T', mutation = true, requires = { 'selected', 'no_notes_merge' },
+      label = 'Edit note', run = function() selected('edit') end },
+    { key = 's', requires = { 'selected', 'note' }, label = 'Show note', run = function() selected('show') end },
+    { key = 'r', mutation = true, requires = { 'selected', 'note', 'no_notes_merge' },
+      label = 'Remove note', run = function() confirm(ctx, 'Remove note for selected commit?', function() selected('remove') end) end },
+    { key = 'p', mutation = true,
+      label = 'Prune unreachable notes',
+      run = function() confirm(ctx, 'Prune notes for unreachable commits?', function() run_workflow(ctx, args('prune')) end) end },
+    { key = 'm', mutation = true, requires = { 'no_notes_merge' }, label = 'Merge another notes ref', run = function()
+      prompt(ctx, 'Notes ref to merge: ', function(ref)
         local argv = args('merge'); if state.strategy then argv[#argv + 1] = '--strategy=' .. state.strategy end
-        argv[#argv + 1] = ref; workflow.run(ctx.work_tree, argv)
+        argv[#argv + 1] = ref; run_workflow(ctx, argv)
       end, 'refs/notes/incoming/commits')
     end },
-    { key = 'f', label = 'Fetch notes into incoming ref', run = function() sync(true) end },
-    { key = 'P', label = 'Push notes ref', run = function() sync(false) end },
+    { key = 'f', mutation = true, label = 'Fetch notes into incoming ref', run = function() sync(true) end },
+    { key = 'P', mutation = true, label = 'Push notes ref', run = function() sync(false) end },
   }
   if merging then
     actions = {
-      { key = 'c', label = 'Commit resolved notes merge', run = function() local argv = args('merge'); argv[#argv + 1] = '--commit'; workflow.run(ctx.work_tree, argv) end },
-      { key = 'a', label = 'Abort notes merge', run = function() confirm('Abort notes merge?', function() local argv = args('merge'); argv[#argv + 1] = '--abort'; workflow.run(ctx.work_tree, argv) end) end },
+      { key = 'c', mutation = true, requires = { 'notes_merge' },
+        label = 'Commit resolved notes merge', run = function() local argv = args('merge'); argv[#argv + 1] = '--commit'; run_workflow(ctx, argv) end },
+      { key = 'a', mutation = true, requires = { 'notes_merge' },
+        label = 'Abort notes merge',
+        run = function() confirm(ctx, 'Abort notes merge?', function() local argv = args('merge'); argv[#argv + 1] = '--abort'; run_workflow(ctx, argv) end) end },
     }
   end
   return show({ kind = 'notes', title = 'Git Notes', groups = {

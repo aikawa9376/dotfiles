@@ -1,6 +1,7 @@
 -- Repository configuration is applied immediately, never saved as transient arguments.
 local M = {}
 local utils = require('git.utils')
+local availability = require('git.features.magit_availability')
 
 local function run(ctx, args)
   if not ctx.work_tree then return { code = 1, stderr = 'No repository selected' } end
@@ -20,6 +21,7 @@ local function values(ctx, key)
 end
 
 local function mutate(ctx, args, ui, valid)
+  if not availability.valid(ctx, true) then return end
   if valid and not valid() then return end
   if require('git.features.async').busy(ctx.work_tree) then
     vim.notify('A Git history operation is already running', vim.log.levels.WARN)
@@ -50,8 +52,9 @@ function M.branch(ctx)
   return read(ctx, { 'symbolic-ref', '--quiet', '--short', 'HEAD' })
 end
 
-local function field(ctx, key, variable, choices, valid)
-  return { key = key, keep_open = true, label = function()
+local function field(ctx, key, variable, choices, valid, available)
+  return { key = key, keep_open = true, mutation = true,
+    requires = available and { available } or nil, label = function()
     local current = values(ctx, variable)
     return variable .. ': ' .. (#current > 0 and table.concat(current, ', ') or 'unset')
   end, run = function(ui)
@@ -69,11 +72,11 @@ local function field(ctx, key, variable, choices, valid)
     if choices then
       local candidates = type(choices) == 'function' and choices() or vim.deepcopy(choices)
       table.insert(candidates, 1, '(unset)')
-      vim.ui.select(candidates, { prompt = variable .. ': ' }, function(value)
+      availability.select(ctx, candidates, { prompt = variable .. ': ' }, function(value)
         set(value == '(unset)' and '' or value)
       end)
     else
-      vim.ui.input({ prompt = variable .. ' (blank clears): ', default = current or '' }, set)
+      availability.input(ctx, { prompt = variable .. ' (blank clears): ', default = current or '' }, set)
     end
   end }
 end
@@ -87,6 +90,10 @@ function M.branch_groups(ctx, branch)
   if branch then
     local prefix = 'branch.' .. branch .. '.'
     local function valid() return local_branch(ctx, branch) end
+    local function available(s)
+      return s:resolve('refs/heads/' .. branch) ~= nil or s:branch() == branch,
+        'Selected local branch no longer exists'
+    end
     local function upstream(unset, ui)
       if not valid() then return end
       if unset then
@@ -99,7 +106,7 @@ function M.branch_groups(ctx, branch)
             return ref ~= branch and not ref:match('/HEAD$') and ref:sub(1, #lead) == lead
           end, vim.split(refs, '\n', { trimempty = true }))
         end
-        vim.ui.input({ prompt = 'Upstream for ' .. branch .. ': ',
+        availability.input(ctx, { prompt = 'Upstream for ' .. branch .. ': ',
           completion = 'customlist,v:lua.git_config_upstream_completion',
           default = read(ctx, { 'rev-parse', '--abbrev-ref', branch .. '@{upstream}' }) or '' },
           function(ref)
@@ -110,17 +117,17 @@ function M.branch_groups(ctx, branch)
       end
     end
     groups[#groups + 1] = { title = 'Configure ' .. branch, actions = {
-      { key = 'u', keep_open = true, label = function()
+      { key = 'u', keep_open = true, mutation = true, requires = { available }, label = function()
         local merge = values(ctx, prefix .. 'merge')[1]
         local remote = values(ctx, prefix .. 'remote')[1]
         return merge and ('Unset upstream: ' .. (remote or '?') .. '/' .. merge:gsub('^refs/heads/', ''))
           or 'Set upstream: unset'
       end, run = function(ui) upstream(values(ctx, prefix .. 'merge')[1] ~= nil, ui) end },
-      { key = 'U', keep_open = true, label = 'Set / replace upstream',
+      { key = 'U', keep_open = true, mutation = true, requires = { available }, label = 'Set / replace upstream',
         run = function(ui) upstream(false, ui) end },
-      field(ctx, 'd', prefix .. 'description', nil, valid),
-      field(ctx, 'r', prefix .. 'rebase', { 'true', 'merges', 'interactive', 'false' }, valid),
-      field(ctx, 'p', prefix .. 'pushRemote', function() return remotes(ctx) end, valid),
+      field(ctx, 'd', prefix .. 'description', nil, valid, available),
+      field(ctx, 'r', prefix .. 'rebase', { 'true', 'merges', 'interactive', 'false' }, valid, available),
+      field(ctx, 'p', prefix .. 'pushRemote', function() return remotes(ctx) end, valid, available),
     } }
   end
   groups[#groups + 1] = { title = 'Configure repository defaults', actions = {
@@ -137,7 +144,7 @@ function M.open_branch(ctx, ui, show)
     'refs/heads/' }) or '', '\n', { trimempty = true })
   local current = read(ctx, { 'symbolic-ref', '--quiet', '--short', 'HEAD' })
   if current and not vim.tbl_contains(branches, current) then branches[#branches + 1] = current end
-  vim.ui.select(branches, { prompt = 'Configure local branch: ' }, function(branch)
+  availability.select(ctx, branches, { prompt = 'Configure local branch: ' }, function(branch)
     if not branch or not local_branch(ctx, branch) then return end
     show({ kind = 'branch-config', title = 'Branch configuration', context = 'Ref: ' .. branch,
       groups = M.branch_groups(ctx, branch) }, ui)
@@ -145,19 +152,19 @@ function M.open_branch(ctx, ui, show)
 end
 
 -- Multi-valued remote fields edit one entry at a time and preserve its siblings.
-local function remote_field(ctx, key, variable, valid)
-  return { key = key, keep_open = true, label = function()
+local function remote_field(ctx, key, variable, valid, available)
+  return { key = key, keep_open = true, mutation = true, requires = { available }, label = function()
     local current = values(ctx, variable)
     return variable .. ': ' .. (#current > 0 and table.concat(current, ', ') or 'unset')
   end, run = function(ui)
     local entries = values(ctx, variable)
     local items = vim.tbl_map(function(value) return { value = value } end, entries)
     items[#items + 1] = { add = true }
-    vim.ui.select(items, { prompt = variable .. ': ', format_item = function(item)
+    availability.select(ctx, items, { prompt = variable .. ': ', format_item = function(item)
       return item.add and 'Add value' or item.value
     end }, function(item)
       if not item then return end
-      vim.ui.input({ prompt = variable .. ' (blank removes entry): ', default = item.value or '' },
+      availability.input(ctx, { prompt = variable .. ' (blank removes entry): ', default = item.value or '' },
         function(value)
           if value == nil then return end
           value = vim.trim(value)
@@ -177,17 +184,18 @@ local function remote_field(ctx, key, variable, valid)
 end
 
 function M.remote_groups(ctx, remote)
+  local function available(s) return s:remote(remote), 'Selected remote no longer exists' end
   local function valid()
     if vim.tbl_contains(remotes(ctx), remote) then return true end
     vim.notify('Selected remote no longer exists', vim.log.levels.WARN); return false
   end
   local prefix = 'remote.' .. remote .. '.'
   return { { title = 'Configure ' .. remote, actions = {
-    remote_field(ctx, 'u', prefix .. 'url', valid),
-    remote_field(ctx, 'U', prefix .. 'fetch', valid),
-    remote_field(ctx, 's', prefix .. 'pushurl', valid),
-    remote_field(ctx, 'S', prefix .. 'push', valid),
-    field(ctx, 'O', prefix .. 'tagOpt', { '--no-tags', '--tags' }, valid),
+    remote_field(ctx, 'u', prefix .. 'url', valid, available),
+    remote_field(ctx, 'U', prefix .. 'fetch', valid, available),
+    remote_field(ctx, 's', prefix .. 'pushurl', valid, available),
+    remote_field(ctx, 'S', prefix .. 'push', valid, available),
+    field(ctx, 'O', prefix .. 'tagOpt', { '--no-tags', '--tags' }, valid, available),
   } } }
 end
 
@@ -200,7 +208,7 @@ function M.remote(ctx)
 end
 
 function M.open_remote(ctx, ui, show)
-  vim.ui.select(remotes(ctx), { prompt = 'Configure remote: ' }, function(remote)
+  availability.select(ctx, remotes(ctx), { prompt = 'Configure remote: ' }, function(remote)
     if not remote then return end
     show({ kind = 'remote-config', title = 'Remote configuration', context = 'Remote: ' .. remote,
       groups = M.remote_groups(ctx, remote) }, ui)

@@ -1,9 +1,10 @@
 local M = {}
 local options = require('git.features.transient_options')
+local availability = require('git.features.magit_availability')
 local toggle, option_arg, choices = options.flag, options.value, options.choices
 
-local function prompt(label, callback, default)
-  vim.ui.input({ prompt = label, default = default }, function(value)
+local function prompt(ctx, label, callback, default)
+  availability.input(ctx, { prompt = label, default = default }, function(value)
     if value and vim.trim(value) ~= '' then callback(vim.trim(value)) end
   end)
 end
@@ -13,9 +14,8 @@ local function confirm(label, callback)
 end
 
 local function selected_ref(ctx, label, callback)
-  if ctx.commit then callback(ctx.commit)
-  elseif ctx.branch then callback(ctx.branch)
-  else prompt(label, callback) end
+  local ref = availability.ref(ctx)
+  if ref then callback(ref) else prompt(ctx, label, callback) end
 end
 
 local function selected_context(ctx)
@@ -34,14 +34,18 @@ local function short_target(ctx)
 end
 
 local function selected_path(ctx, label, callback)
-  if ctx.path then callback(ctx.path) else prompt(label, callback) end
+  if ctx.path then callback(ctx.path) else prompt(ctx, label, callback) end
 end
 
-local function stash_ref(callback)
-  prompt('Stash ref: ', callback, 'stash@{0}')
+local function stash_ref(ctx, callback)
+  prompt(ctx, 'Stash ref: ', callback, 'stash@{0}')
 end
 
 local function at_source(ctx, callback)
+  if not availability.valid(ctx, true) then return end
+  if vim.api.nvim_win_get_buf(ctx.source_win) ~= ctx.bufnr then
+    vim.notify('Source window changed; reopen the action menu', vim.log.levels.WARN); return
+  end
   if vim.api.nvim_win_is_valid(ctx.source_win) then
     vim.api.nvim_set_current_win(ctx.source_win)
   end
@@ -127,7 +131,7 @@ function M.root(ctx, helpers)
         signature,
       } },
       { title = 'Diff', actions = {
-        { key = 'd', label = 'Selected item', run = function()
+        { key = 'd', requires = { 'selected', 'diff_target' }, label = 'Selected item', run = function()
           if ctx.commit then
             if state.signature then
               local args = { 'show', '--format=fuller' }
@@ -147,7 +151,7 @@ function M.root(ctx, helpers)
               git(args, ctx)
             else diff(ctx.commit .. '^', ctx.commit) end
           elseif ctx.path then diff(nil, nil, ctx.path)
-          elseif ctx.branch then diff('HEAD', ctx.branch)
+          elseif ctx.branch then diff('HEAD', availability.ref(ctx))
           else diff('HEAD') end
         end },
         { key = 'u', label = 'Unstaged', run = function() diff() end },
@@ -158,7 +162,7 @@ function M.root(ctx, helpers)
           git(args, ctx)
         end },
         { key = 'r', label = 'Revision range', run = function()
-          prompt('Diff revisions (A..B): ', function(value) diff(value) end)
+          prompt(ctx, 'Diff revisions (A..B): ', function(value) diff(value) end)
         end },
       } },
     } }, ui)
@@ -259,15 +263,15 @@ function M.root(ctx, helpers)
         switch_arg('=S', 'Show signatures', 'signature', '--show-signature'),
       } },
       { title = 'Log', actions = {
-        { key = 'l', label = 'Current branch', run = function() log() end },
-        { key = 'h', label = 'HEAD', run = function() log('HEAD') end },
-        { key = 'b', label = 'All branches', run = function()
+        { key = 'l', requires = { 'head', 'log_arguments' }, label = 'Current branch', run = function() log() end },
+        { key = 'h', requires = { 'head', 'log_arguments' }, label = 'HEAD', run = function() log('HEAD') end },
+        { key = 'b', requires = { 'refs', 'log_arguments' }, label = 'All branches', run = function()
           state.all = true; log()
         end },
-        { key = 'o', label = 'Other ref', run = function()
-          prompt('Log ref: ', log, ctx.branch)
+        { key = 'o', requires = { 'log_arguments' }, label = 'Other ref', run = function()
+          prompt(ctx, 'Log ref: ', log, ctx.branch)
         end },
-        { key = 'r', label = 'Reflog', run = function()
+        { key = 'r', requires = { 'head' }, label = 'Reflog', run = function()
           at_source(ctx, function() vim.cmd('Greflog') end)
         end },
       } },
@@ -282,9 +286,9 @@ function M.root(ctx, helpers)
         else run() end
       end)
     end
-    show({ kind = 'reset', title = 'Reset', context = selected_context(ctx), groups = {
+    show({ kind = 'reset', mutation = true, requires = { 'selected' }, title = 'Reset', context = selected_context(ctx), groups = {
       { title = 'Reset HEAD to ' .. short_target(ctx), actions = {
-        { key = 's', label = 'Soft: HEAD only', run = function() reset('soft') end },
+        { key = 's', requires = { 'resolved', 'no_sequence' }, label = 'Soft: HEAD only', run = function() reset('soft') end },
         { key = 'm', label = 'Mixed: HEAD and index', run = function() reset('mixed') end },
         { key = 'h', label = 'Hard: HEAD, index, worktree', run = function() reset('hard') end },
         { key = 'k', label = 'Keep worktree changes', run = function() reset('keep') end },
@@ -302,7 +306,7 @@ function M.root(ctx, helpers)
         end },
       } },
       { title = 'File', actions = {
-        { key = 'u', label = 'Unstage file', run = function()
+        { key = 'u', requires = { 'head' }, label = 'Unstage file', run = function()
           selected_path(ctx, 'Path to unstage: ', function(path)
             git({ 'reset', 'HEAD', '--', path }, ctx)
           end)
@@ -333,8 +337,8 @@ function M.root(ctx, helpers)
     end
     show({ kind = 'stash', title = 'Stash', groups = {
       { title = 'Arguments', actions = {
-        toggle('-u', 'Include untracked', state, 'untracked', '--include-untracked'),
-        toggle('-a', 'Include ignored too', state, 'all', '--all'),
+        toggle('-u', 'Include untracked', state, 'untracked', '--include-untracked', 'all'),
+        toggle('-a', 'Include ignored too', state, 'all', '--all', 'untracked'),
       } },
       { title = 'Push arguments', actions = {
         option_arg('--', 'Limit to file', state, 'path', '-- '),
@@ -342,10 +346,14 @@ function M.root(ctx, helpers)
         toggle('-K', "Don't keep index", state, 'no_keep_index', '--no-keep-index', 'keep_index'),
       } },
       { title = 'Save', actions = {
-        { key = 'z', label = 'Index and worktree', run = function() push() end },
-        { key = 'i', label = 'Staged changes', run = function() push('--staged') end },
-        { key = 'w', label = 'Worktree changes', run = function() push('--keep-index') end },
-        { key = 'P', label = 'Push selected changes', run = function()
+        { key = 'z', mutation = true, requires = { 'head', 'resolved', 'stash_save' },
+          label = 'Index and worktree', run = function() push() end },
+        { key = 'i', mutation = true, requires = { 'head', 'resolved', 'staged' },
+          label = 'Staged changes', run = function() push('--staged') end },
+        { key = 'w', mutation = true, requires = { 'head', 'resolved', 'tracked_changes' },
+          label = 'Worktree changes', run = function() push('--keep-index') end },
+        { key = 'P', mutation = true, requires = { 'head', 'resolved', 'stash_save' },
+          label = 'Push selected changes', run = function()
           local args = { 'stash', 'push' }
           if state.all then args[#args + 1] = '--all'
           elseif state.untracked then args[#args + 1] = '--include-untracked' end
@@ -356,26 +364,26 @@ function M.root(ctx, helpers)
         end },
       } },
       { title = 'Use', actions = {
-        { key = 'p', label = 'Pop stash', run = function()
-          stash_ref(function(ref) git({ 'stash', 'pop', ref }, ctx) end)
+        { key = 'p', mutation = true, requires = { 'resolved', 'stashes' }, label = 'Pop stash', run = function()
+          stash_ref(ctx, function(ref) git({ 'stash', 'pop', ref }, ctx) end)
         end },
-        { key = 'a', label = 'Apply stash', run = function()
-          stash_ref(function(ref) git({ 'stash', 'apply', ref }, ctx) end)
+        { key = 'a', mutation = true, requires = { 'resolved' }, label = 'Apply stash', run = function()
+          stash_ref(ctx, function(ref) git({ 'stash', 'apply', ref }, ctx) end)
         end },
-        { key = 'k', aliases = { 'd' }, label = 'Drop stash', run = function()
-          stash_ref(function(ref)
+        { key = 'k', mutation = true, requires = { 'stashes' }, aliases = { 'd' }, label = 'Drop stash', run = function()
+          stash_ref(ctx, function(ref)
             confirm('Drop ' .. ref .. '?', function() git({ 'stash', 'drop', ref }, ctx) end)
           end)
         end },
         { key = 'v', label = 'Show stash patch', run = function()
-          stash_ref(function(ref) git({ 'stash', 'show', '-p', ref }, ctx) end)
+          stash_ref(ctx, function(ref) git({ 'stash', 'show', '-p', ref }, ctx) end)
         end },
         { key = 'l', label = 'List stashes', run = function()
           at_source(ctx, function() vim.cmd('Gstash') end)
         end },
-        { key = 'b', label = 'Create branch from stash', run = function()
-          stash_ref(function(ref)
-            prompt('New branch name: ', function(name)
+        { key = 'b', mutation = true, requires = { 'no_sequence', 'resolved' }, label = 'Create branch from stash', run = function()
+          stash_ref(ctx, function(ref)
+            prompt(ctx, 'New branch name: ', function(name)
               git({ 'stash', 'branch', name, ref }, ctx)
             end)
           end)
@@ -395,8 +403,9 @@ function M.root(ctx, helpers)
         option_arg('-u', 'Sign as', state, 'sign_as', '--local-user='),
       } },
       { title = 'Actions', actions = {
-        { key = 't', label = 'Create tag at ' .. short_target(ctx), run = function()
-          prompt('New tag name: ', function(name)
+        { key = 't', mutation = true, requires = { 'selected', 'startpoint' },
+          label = 'Create tag at ' .. short_target(ctx), run = function()
+          prompt(ctx, 'New tag name: ', function(name)
             local args = { 'tag' }
             if state.force then args[#args + 1] = '-f' end
             if state.signed or state.sign_as then args[#args + 1] = '-s'
@@ -406,23 +415,23 @@ function M.root(ctx, helpers)
             local function create(message)
               if message then vim.list_extend(args, { '-m', message }) end
               args[#args + 1] = name
-              args[#args + 1] = ctx.commit or ctx.branch or 'HEAD'
+              args[#args + 1] = availability.ref(ctx) or 'HEAD'
               git(args, ctx)
             end
             if (state.annotated or state.signed or state.sign_as) and not state.edit then
-              prompt('Tag message: ', create, name)
+              prompt(ctx, 'Tag message: ', create, name)
             else create() end
           end)
         end },
-        { key = 'k', aliases = { 'x' }, label = 'Delete tag', run = function()
-          prompt('Tag to delete: ', function(name)
+        { key = 'k', mutation = true, requires = { 'tags' }, aliases = { 'x' }, label = 'Delete tag', run = function()
+          prompt(ctx, 'Tag to delete: ', function(name)
             confirm('Delete tag ' .. name .. '?', function() git({ 'tag', '-d', name }, ctx) end)
           end, ctx.branch_kind == 'tags' and ctx.branch or nil)
         end },
         { key = 'l', label = 'List tags', run = function() git({ 'tag', '-n' }, ctx) end },
-        { key = 'r', label = 'Create release tag', run = function()
-          prompt('Release tag name: ', function(name)
-            prompt('Release message: ', function(message)
+        { key = 'r', mutation = true, requires = { 'head', 'selected' }, label = 'Create release tag', run = function()
+          prompt(ctx, 'Release tag name: ', function(name)
+            prompt(ctx, 'Release message: ', function(message)
               git({ 'tag', '-a', '-m', message, name, ctx.commit or 'HEAD' }, ctx)
             end, name)
           end)
@@ -442,7 +451,7 @@ function M.root(ctx, helpers)
         { key = 's', label = 'Skip commit', run = function() git({ 'bisect', 'skip' }, ctx) end },
         { key = 'r', label = 'Reset bisect', run = function() git({ 'bisect', 'reset' }, ctx) end },
         { key = 'S', label = 'Run test command', run = function()
-          prompt('Test command and arguments: ', function(command)
+          prompt(ctx, 'Test command and arguments: ', function(command)
             local args = { 'bisect', 'run' }
             vim.list_extend(args, require('git.commands').argv(command))
             git(args, ctx)
@@ -451,14 +460,14 @@ function M.root(ctx, helpers)
       }
     else
       actions = { { key = 'B', label = 'Start with bad and good commits', run = function()
-        prompt('Bad commit: ', function(bad)
-          prompt('Good commit: ', function(good)
+        prompt(ctx, 'Bad commit: ', function(bad)
+          prompt(ctx, 'Good commit: ', function(good)
             git({ 'bisect', 'start', bad, good }, ctx)
           end)
         end, ctx.commit or 'HEAD')
       end } }
     end
-    show({ kind = 'bisect', title = 'Bisect',
+    show({ kind = 'bisect', mutation = true, requires = running and { availability.operation('bisect') } or { 'head', 'idle', 'resolved' }, title = 'Bisect',
       context = not running and selected_context(ctx) or nil, groups = {
       { title = running and 'Bisect in progress' or 'Bisect', actions = actions },
     } }, ui)
@@ -467,37 +476,39 @@ function M.root(ctx, helpers)
   local function worktree_menu(ui)
     show({ kind = 'worktree', title = 'Worktree', context = ctx.target_worktree, groups = {
       { title = 'Actions', actions = {
-        { key = 'b', label = 'Add existing branch in worktree', run = function()
-          prompt('Worktree path: ', function(path)
+        { key = 'b', mutation = true, requires = { 'startpoint', 'selected', 'unoccupied_target' },
+          label = 'Add existing branch in worktree', run = function()
+          prompt(ctx, 'Worktree path: ', function(path)
             selected_ref(ctx, 'Branch: ', function(ref)
               git({ 'worktree', 'add', path, ref }, ctx)
             end)
           end)
         end },
-        { key = 'c', label = 'Create branch and worktree', run = function()
-          prompt('Worktree path: ', function(path)
-            prompt('New branch: ', function(branch)
+        { key = 'c', mutation = true, requires = { 'head' }, label = 'Create branch and worktree', run = function()
+          prompt(ctx, 'Worktree path: ', function(path)
+            prompt(ctx, 'New branch: ', function(branch)
               git({ 'worktree', 'add', '-b', branch, path }, ctx)
             end)
           end)
         end },
-        { key = 'm', label = 'Move worktree', run = function()
+        { key = 'm', mutation = true, requires = { 'linked_worktree' }, label = 'Move worktree', run = function()
           local function move(old)
-            prompt('New worktree path: ', function(new)
+            prompt(ctx, 'New worktree path: ', function(new)
               git({ 'worktree', 'move', old, new }, ctx)
             end)
           end
           if ctx.target_worktree then move(ctx.target_worktree)
-          else prompt('Current worktree path: ', move) end
+          else prompt(ctx, 'Current worktree path: ', move) end
         end },
-        { key = 'k', label = 'Remove worktree', run = function()
+        { key = 'k', mutation = true, requires = { 'linked_worktree', 'removable_worktree' },
+          label = 'Remove worktree', run = function()
           local function remove(path)
             confirm('Remove worktree ' .. path .. '?', function()
               git({ 'worktree', 'remove', path }, ctx)
             end)
           end
           if ctx.target_worktree then remove(ctx.target_worktree)
-          else prompt('Worktree path to remove: ', remove) end
+          else prompt(ctx, 'Worktree path to remove: ', remove) end
         end },
         { key = 'g', label = 'List worktrees', run = function()
           if ctx.target_worktree then
@@ -518,12 +529,12 @@ function M.root(ctx, helpers)
         toggle('-f', 'Fetch after add', state, 'fetch_after_add', '-f'),
       } },
       { title = 'Actions', actions = {
-        { key = 'C', label = 'Configure remote…', run = function(source)
+        { key = 'C', requires = { 'remotes' }, label = 'Configure remote…', run = function(source)
           config.open_remote(ctx, source, show)
         end },
-        { key = 'a', label = 'Add remote', run = function()
-          prompt('Remote name: ', function(name)
-            prompt('Remote URL: ', function(url)
+        { key = 'a', mutation = true, label = 'Add remote', run = function()
+          prompt(ctx, 'Remote name: ', function(name)
+            prompt(ctx, 'Remote URL: ', function(url)
               local args = { 'remote', 'add' }
               if state.fetch_after_add then args[#args + 1] = '-f' end
               vim.list_extend(args, { name, url })
@@ -531,22 +542,22 @@ function M.root(ctx, helpers)
             end)
           end)
         end },
-        { key = 'r', label = 'Rename remote', run = function()
-          prompt('Current remote name: ', function(old)
-            prompt('New remote name: ', function(new)
+        { key = 'r', mutation = true, requires = { 'remotes' }, label = 'Rename remote', run = function()
+          prompt(ctx, 'Current remote name: ', function(old)
+            prompt(ctx, 'New remote name: ', function(new)
               git({ 'remote', 'rename', old, new }, ctx)
             end)
           end)
         end },
-        { key = 'k', aliases = { 'x' }, label = 'Remove remote', run = function()
-          prompt('Remote to remove: ', function(name)
+        { key = 'k', mutation = true, requires = { 'remotes' }, aliases = { 'x' }, label = 'Remove remote', run = function()
+          prompt(ctx, 'Remote to remove: ', function(name)
             confirm('Remove remote ' .. name .. '?', function()
               git({ 'remote', 'remove', name }, ctx)
             end)
           end)
         end },
-        { key = 'p', label = 'Prune stale refs', run = function()
-          prompt('Remote to prune: ', function(name) git({ 'remote', 'prune', name }, ctx) end)
+        { key = 'p', mutation = true, requires = { 'remotes' }, label = 'Prune stale refs', run = function()
+          prompt(ctx, 'Remote to prune: ', function(name) git({ 'remote', 'prune', name }, ctx) end)
         end },
         { key = 'l', label = 'List remotes', run = function() git({ 'remote', '-v' }, ctx) end },
       } },
@@ -556,17 +567,17 @@ function M.root(ctx, helpers)
   end
 
   local function ignore_menu(ui)
-    show({ kind = 'ignore', title = 'Ignore', groups = {
+    show({ kind = 'ignore', mutation = true, title = 'Ignore', groups = {
       { title = 'Add ignore pattern', actions = {
         { key = 't', label = 'Repository .gitignore', run = function()
-          prompt('Ignore pattern: ', function(pattern)
+          prompt(ctx, 'Ignore pattern: ', function(pattern)
             if pattern:find('[\r\n]') then return end
             vim.fn.writefile({ pattern }, ctx.work_tree .. '/.gitignore', 'a')
             require('git.utils').fire_git_changed({ work_tree = ctx.work_tree })
           end, ctx.path)
         end },
         { key = 'p', label = 'Private repository exclude', run = function()
-          prompt('Ignore pattern: ', function(pattern)
+          prompt(ctx, 'Ignore pattern: ', function(pattern)
             if pattern:find('[\r\n]') then return end
             local result = vim.system({ 'git', '-C', ctx.work_tree, 'rev-parse',
               '--git-path', 'info/exclude' }, { text = true }):wait()
@@ -595,7 +606,7 @@ function M.root(ctx, helpers)
       vim.fn.setreg('"', vim.trim(result.stdout))
       vim.notify('Copied commit information')
     end
-    show({ kind = 'yank', title = 'Copy commit', context = selected_context(ctx), groups = {
+    show({ kind = 'yank', requires = { 'selected' }, title = 'Copy commit', context = selected_context(ctx), groups = {
       { title = 'Copy', actions = {
         { key = 'Y', label = 'Full hash', run = function() vim.fn.setreg('"', ctx.commit) end },
         { key = 's', label = 'Subject', run = function()
@@ -637,7 +648,8 @@ function M.root(ctx, helpers)
   local function submodule_menu(ui)
     local state = { recursive = true }
     local function module_path(label, callback)
-      selected_path(ctx, label, callback)
+      local path = availability.selected_submodule(ctx)
+      if path then callback(path) else prompt(ctx, label, callback) end
     end
     local function update_flags()
       local args = {}
@@ -664,9 +676,9 @@ function M.root(ctx, helpers)
         toggle('-U', 'Use upstream tip', state, 'remote_tip', '--remote'),
       } },
       { title = 'Actions', actions = {
-        { key = 'a', label = 'Add submodule', run = function()
-          prompt('Submodule URL: ', function(url)
-            prompt('Submodule path: ', function(path)
+        { key = 'a', mutation = true, requires = { 'no_sequence', 'resolved' }, label = 'Add submodule', run = function()
+          prompt(ctx, 'Submodule URL: ', function(url)
+            prompt(ctx, 'Submodule path: ', function(path)
               local args = { 'submodule', 'add' }
               if state.force then args[#args + 1] = '--force' end
               vim.list_extend(args, { url, path })
@@ -674,7 +686,8 @@ function M.root(ctx, helpers)
             end)
           end)
         end },
-        { key = 'p', label = 'Initialize and populate', run = function()
+        { key = 'p', mutation = true, requires = { 'modules', 'no_sequence', 'resolved' },
+          label = 'Initialize and populate', run = function()
           module_path('Submodule path: ', function(path)
             local args = { 'submodule', 'update', '--init' }
             if state.recursive then args[#args + 1] = '--recursive' end
@@ -682,22 +695,23 @@ function M.root(ctx, helpers)
             git(args, ctx)
           end)
         end },
-        { key = 'r', label = 'Register submodule URL', run = function()
+        { key = 'r', mutation = true, requires = { 'modules' }, label = 'Register submodule URL', run = function()
           module_path('Submodule path: ', function(path)
             git({ 'submodule', 'init', '--', path }, ctx)
           end)
         end },
-        { key = 'u', label = 'Update recursively', run = function()
+        { key = 'u', mutation = true, requires = { 'modules', 'no_sequence', 'resolved' },
+          label = 'Update recursively', run = function()
           local args = { 'submodule', 'update', '--init' }
           vim.list_extend(args, update_flags())
           git(args, ctx)
         end },
-        { key = 's', label = 'Synchronize URLs', run = function()
+        { key = 's', mutation = true, requires = { 'modules' }, label = 'Synchronize URLs', run = function()
           local args = { 'submodule', 'sync' }
           if state.recursive then args[#args + 1] = '--recursive' end
           git(args, ctx)
         end },
-        { key = 'd', label = 'Deinitialize', run = function()
+        { key = 'd', mutation = true, requires = { 'modules', 'no_sequence', 'resolved' }, label = 'Deinitialize', run = function()
           module_path('Submodule path: ', function(path)
             confirm('Deinitialize submodule ' .. path .. '?', function()
               local args = { 'submodule', 'deinit' }
@@ -710,7 +724,7 @@ function M.root(ctx, helpers)
         { key = 'l', label = 'List submodules', run = function()
           git({ 'submodule', 'status', '--recursive' }, ctx)
         end },
-        { key = 'f', label = 'Fetch submodules', run = function()
+        { key = 'f', mutation = true, requires = { 'modules', 'default_remote' }, label = 'Fetch submodules', run = function()
           git({ 'fetch', '--recurse-submodules' }, ctx)
         end },
       } },
@@ -720,8 +734,8 @@ function M.root(ctx, helpers)
   local function clone_menu(ui)
     local state = {}
     local function clone(flags)
-      prompt('Repository URL or path: ', function(source)
-        prompt('Clone destination path: ', function(destination)
+      prompt(ctx, 'Repository URL or path: ', function(source)
+        prompt(ctx, 'Clone destination path: ', function(destination)
           local args = { 'clone' }
           for _, item in ipairs({ { 'single_branch', '--single-branch' },
             { 'no_tags', '--no-tags' }, { 'submodules', '--recurse-submodules' },
@@ -767,12 +781,12 @@ function M.root(ctx, helpers)
           clone({ '--filter=blob:none', '--sparse' })
         end },
         { key = 'd', label = 'Shallow since date', run = function()
-          prompt('Shallow since date: ', function(date)
+          prompt(ctx, 'Shallow since date: ', function(date)
             clone({ '--shallow-since=' .. date })
           end)
         end },
         { key = 'e', label = 'Shallow excluding ref', run = function()
-          prompt('Exclude commits reachable from ref: ', function(ref)
+          prompt(ctx, 'Exclude commits reachable from ref: ', function(ref)
             clone({ '--shallow-exclude=' .. ref })
           end)
         end },
