@@ -63,6 +63,7 @@ local ACP_WINDOW_OPTIONS = {
   "concealcursor",
   "linebreak",
   "breakindent",
+  "breakindentopt",
   "signcolumn",
   "statuscolumn",
   "foldcolumn",

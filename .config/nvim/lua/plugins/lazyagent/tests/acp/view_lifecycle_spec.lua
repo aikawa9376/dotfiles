@@ -54,6 +54,7 @@ function M.run()
     number = vim.wo[source_winid].number,
     relativenumber = vim.wo[source_winid].relativenumber,
     wrap = vim.wo[source_winid].wrap,
+    breakindentopt = vim.wo[source_winid].breakindentopt,
     signcolumn = vim.wo[source_winid].signcolumn,
     statusline = vim.wo[source_winid].statusline,
     fillchars = vim.wo[source_winid].fillchars,
@@ -62,6 +63,7 @@ function M.run()
     number = true,
     relativenumber = true,
     wrap = false,
+    breakindentopt = "shift:2,min:15",
     signcolumn = "yes",
   }
   local normal_buffer_defaults = {
@@ -116,6 +118,12 @@ function M.run()
   assert_equal(view.focus_pane(background_pane_id), true, "opened background view can be focused")
   assert_equal(vim.api.nvim_get_current_buf(), opened_background.panes[tostring(background_pane_id)].bufnr,
     "background pane focus selects its transcript buffer")
+  assert_equal(vim.wo.breakindentopt, "list:-1", "conversation wraps align after list markers")
+  local list_pattern = vim.bo.formatlistpat
+  for _, marker in ipairs({ " - ", "   * ", " + ", " 12. ", " 3) " }) do
+    assert_equal(vim.fn.matchstr(marker .. "body", list_pattern), marker, "Markdown list prefix " .. marker)
+  end
+  assert_equal(vim.fn.matchstr("   ordinary text", list_pattern), "", "ordinary indentation is not a list")
   local original_agent_winid = vim.api.nvim_get_current_win()
   vim.cmd("tabnew")
   local target_winid = vim.api.nvim_get_current_win()

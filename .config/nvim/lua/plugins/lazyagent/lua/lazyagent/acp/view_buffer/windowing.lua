@@ -674,6 +674,8 @@ function M.new(ctx)
       vim.wo[win].concealcursor = "nvic"
       vim.wo[win].linebreak = true
       vim.wo[win].breakindent = true
+      -- Native wraps in Tool output also align after Markdown list markers.
+      vim.wo[win].breakindentopt = "list:-1"
       vim.wo[win].signcolumn = "no"
       vim.wo[win].statuscolumn = ""
       vim.wo[win].foldcolumn = "0"
@@ -726,6 +728,7 @@ function M.new(ctx)
       vim.bo[bufnr].swapfile = false
       vim.bo[bufnr].undofile = false
       vim.bo[bufnr].undolevels = -1
+      vim.bo[bufnr].formatlistpat = [[^\s*\%([-+*]\|\d\+[.)]\)\s\+]]
       vim.bo[bufnr].buflisted = false
       vim.b[bufnr].lazyagent_acp_transcript = true
       vim.b[bufnr].illuminate_disable = true
