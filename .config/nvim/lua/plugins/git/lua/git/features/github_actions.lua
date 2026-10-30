@@ -119,11 +119,11 @@ end
 function M.list(opts)
   M.run(opts, function(ctx)
     return github.json(ctx, { 'pr', 'list', '--repo', github.repo_arg(ctx), '--state', 'open', '--limit', '100',
-      '--json', 'number,title,url,isDraft,reviewDecision,mergeable,statusCheckRollup' })
+      '--json', 'number,title,url,isDraft' })
   end, function(prs, ctx)
     if #prs == 0 then vim.notify('No open pull requests'); return end
     vim.ui.select(prs, { prompt = 'Pull requests', format_item = function(pr)
-      return ('#%d %s%s · %s'):format(pr.number, pr.isDraft and '[draft] ' or '', pr.title, github.summary(pr))
+      return ('#%d %s%s'):format(pr.number, pr.isDraft and '[draft] ' or '', pr.title)
     end }, function(pr)
       if pr then require('git.features.pr').open({ root = ctx.root, url = pr.url }) end
     end)

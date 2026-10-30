@@ -25,6 +25,15 @@ local requests, read = {}, 0
 vim.fn.executable = function(name) return name == 'gh' and 1 or executable(name) end
 vim.system = function(argv, opts, done)
   if argv[1] ~= 'gh' then return system(argv, opts, done) end
+  if argv[2] == 'api' then
+    local data = {}
+    for alias, number in vim.json.decode(opts.stdin).query:gmatch('(p%d+):pullRequest%(number:(%d+)%)') do
+      data[alias] = { number = tonumber(number), url = 'https://github.com/org/repo/pull/' .. number,
+        commits = { nodes = {} } }
+    end
+    vim.schedule(function() done({ code = 0, stdout = vim.json.encode({ data = { repository = data } }), stderr = '' }) end)
+    return { kill = function() end }
+  end
   local head = vim.fn.index(argv, '--head')
   requests[#requests + 1] = { root = opts.cwd, branch = head >= 0 and argv[head + 2] or nil, done = done }
   return { kill = function() end }

@@ -565,6 +565,15 @@ Status PR lists use the repository and branch from the displayed Git snapshot.
 Checking out another branch clears the previous list and resets its manual
 branch/all scope. Replies from older refreshes are discarded. A failed lookup
 shows `Pull requests: unavailable` instead of retaining old PRs; `R` retries.
+The initial lookup requests only basic PR information, retaining up to 100 rows.
+CI, review and mergeability summaries load afterward in sequential batches of
+five PRs. CI summaries use aggregate counts rather than downloading every check.
+Rows show `CI:… Review:…` while waiting; a failed summary shows `unavailable`
+without removing the PR or preventing other batches from loading. Refresh and
+buffer teardown cancel obsolete summary reads; PR identity/head checks reject
+statuses from changed revisions. Each completed batch retains cursor and folds.
+The GitHub PR picker and branch-related menu lookup also request basic fields;
+opening a PR or its CI action loads its details.
 Opening Status from another project's file selects that repository. An existing
 Git panel keeps its own repository when only the working directory changes.
 

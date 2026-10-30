@@ -4,6 +4,19 @@ package.path = plugin .. '/lua/?.lua;' .. plugin .. '/tests/?.lua;' .. package.p
 local f = require('helpers.pr_fixture').new()
 local actions = require('git.features.github_actions')
 local ctx = { root = f.root, url = f.pr.url }
+local original_select, picker = vim.ui.select
+vim.ui.select = function(items, opts, callback)
+  picker = items
+  assert(opts.format_item(items[1]):find(items[1].title, 1, true))
+  callback(nil)
+end
+actions.list(ctx)
+assert(vim.wait(5000, function() return picker ~= nil end, 10))
+local list_call = f.calls[#f.calls]
+local fields = list_call.argv[vim.fn.index(list_call.argv, '--json') + 2]
+assert(list_call.argv[3] == 'list' and fields == 'number,title,url,isDraft',
+  'PR picker still waits for CI/review/merge details')
+vim.ui.select = original_select
 local captured_input, input_opts
 vim.ui.input = function(opts, cb) captured_input, input_opts = cb, opts end
 local view = require('git.features.pr')

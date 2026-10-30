@@ -58,6 +58,9 @@ wait_for(ui, 'Open PR… (3)')
 assert(vim.api.nvim_get_current_line():find('Create default PR', 1, true), 'Header update moved to another action')
 local call = last_call('pr', 'list')
 assert(arg(call, '--head') == 'main' and arg(call, '--state') == 'all' and call.opts.cwd == f.root)
+for _, field in ipairs({ 'statusCheckRollup', 'reviewDecision', 'mergeable' }) do
+  assert(not arg(call, '--json'):find(field, 1, true), 'Related list still fetches expensive status fields')
+end
 assert(not last_call('pr', 'view'), 'Cursor lookup inherited the checked-out branch association')
 assert(text(ui):find('release', 1, true) and text(ui):find('[merged]', 1, true))
 local selected, selection, opened

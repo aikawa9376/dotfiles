@@ -69,7 +69,7 @@ function M.load(opts, resolved)
     if host and host:lower() ~= ctx.host:lower() then error('Selected branch remote uses another GitHub host', 0) end
     local prs = github.json(ctx, { 'pr', 'list', '--repo', github.repo_arg(ctx), '--state', 'all',
       '--head', head, '--limit', '100', '--json',
-      'number,title,url,state,isDraft,headRefName,baseRefName,headRepository,headRepositoryOwner,reviewDecision,mergeable,statusCheckRollup' })
+      'number,title,url,state,isDraft,headRefName,baseRefName,headRepository,headRepositoryOwner' })
     for _, pr in ipairs(prs) do
       local owner, repository = github.scalar(pr.headRepositoryOwner), github.scalar(pr.headRepository)
       local actual = owner and repository and (owner.login .. '/' .. repository.name)

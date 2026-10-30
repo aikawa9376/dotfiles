@@ -96,14 +96,14 @@ function M.json(ctx, args, opts)
   if not ok then error('Invalid JSON from GitHub CLI', 0) end
   return decoded
 end
-function M.api(ctx, endpoint, payload, method)
+function M.api(ctx, endpoint, payload, method, request_opts)
   local args = { 'api', '--hostname', ctx.host, endpoint }
   local opts
   if payload then
     vim.list_extend(args, { '--method', method or 'POST', '--input', '-' })
     opts = { stdin = vim.json.encode(payload) }
   elseif method then vim.list_extend(args, { '--method', method }) end
-  local output = M.command(ctx, args, opts)
+  local output = M.command(ctx, args, vim.tbl_extend('force', request_opts or {}, opts or {}))
   if vim.trim(output) == '' then return nil end -- Successful 204 mutations.
   local ok, decoded = pcall(vim.json.decode, output)
   if not ok then error('Invalid JSON from GitHub CLI', 0) end
@@ -168,6 +168,10 @@ function M.summary(pr, opts)
     for _, chunk in ipairs(M.summary_chunks(pr, opts)) do text[#text + 1] = chunk[1] end
     return table.concat(text)
   end
+  if pr.summary_state == 'loading' or pr.summary_state == 'unavailable' then
+    local value = pr.summary_state == 'loading' and '…' or 'unavailable'
+    return 'CI: ' .. value .. ' · Review: ' .. value
+  end
   local checks = scalar(pr.statusCheckRollup)
   local failed, pending, total = 0, 0, 0
   for _, check in ipairs(type(checks) == 'table' and checks or {}) do
@@ -176,6 +180,9 @@ function M.summary(pr, opts)
     if vim.tbl_contains({ 'FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'STALE' }, result) then
       failed = failed + 1
     elseif result ~= 'SUCCESS' and result ~= 'NEUTRAL' and result ~= 'SKIPPED' then pending = pending + 1 end
+  end
+  if pr.ci_counts then
+    total, failed, pending = pr.ci_counts.total, pr.ci_counts.failed, pr.ci_counts.pending
   end
   local ci = total == 0 and 'CI: —' or failed > 0 and ('CI: ✗ %d/%d'):format(failed, total)
     or pending > 0 and ('CI: ◷ %d/%d'):format(pending, total) or ('CI: ✓ %d'):format(total)

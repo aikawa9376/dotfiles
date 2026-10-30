@@ -1137,6 +1137,13 @@ function M.setup(group)
       local ns_pr = vim.api.nvim_create_namespace('git_status_pull_requests')
       local ns_id = vim.api.nvim_create_namespace('git_status_icons')
       local pr_state = { fetching = false, pending = false, generation = 0 }
+      local function stop_pr_details()
+        local details = pr_state.details
+        if not details then return end
+        pr_state.details = nil
+        if details.task then details.task.cancel() end
+        details.finish()
+      end
       local refresh_scheduled = false
       local fast_refresh_serial = 0
       local index_change_running = false
@@ -1276,6 +1283,7 @@ function M.setup(group)
       fetch_pull_requests = function()
         if not is_live() then return end
         pr_state.generation = pr_state.generation + 1
+        stop_pr_details()
         if pr_state.fetching then
           pr_state.pending = true
           return
@@ -1309,11 +1317,11 @@ function M.setup(group)
           local args = {
             'gh', 'pr', 'list', '--state', 'open',
             '--limit', '100',
-            '--json', 'number,title,headRefName,isDraft,url,author,createdAt,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup',
+            '--json', require('git.features.pr_list').fields,
           }
           if branch then vim.list_extend(args, { '--head', branch }) end
 
-          vim.system(args, { cwd = work_tree, text = true }, function(result)
+          vim.system(args, { cwd = work_tree, text = true, timeout = 30000 }, function(result)
             vim.schedule(function()
               if not is_live() then return end
               if generation ~= pr_state.generation then finish_fetch(); return end
@@ -1332,13 +1340,11 @@ function M.setup(group)
                     number = number,
                     title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
                     headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
+                    headRefOid = pr.headRefOid,
                     author = type(pr.author) == 'table' and pr.author or nil,
                     createdAt = pr.createdAt,
                     isDraft = pr.isDraft == true,
-                    reviewDecision = pr.reviewDecision,
-                    mergeable = pr.mergeable,
-                    mergeStateStatus = pr.mergeStateStatus,
-                    statusCheckRollup = pr.statusCheckRollup,
+                    summary_state = 'loading',
                     url = url,
                     repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
                   })
@@ -1361,6 +1367,19 @@ function M.setup(group)
             refresh_cached({ skip_fold_capture = true })
           end
           finish_fetch()
+          if generation ~= pr_state.generation or not is_live() or #pull_requests == 0 then return end
+          local details = { finish = require('git.features.loading').begin(b, 'pull_request_details') }
+          pr_state.details = details
+          details.task = require('git.features.pr_list').start(work_tree, pull_requests, {
+            is_current = function()
+              return is_live() and generation == pr_state.generation and pull_requests_by_buf[b] == pull_requests
+            end,
+            updated = function() refresh_cached() end,
+            done = function()
+              details.finish()
+              if pr_state.details == details then pr_state.details = nil end
+            end,
+          })
         end
 
         local branch = context.branch == '(detached)' and '' or (context.branch or '')
@@ -1402,13 +1421,17 @@ function M.setup(group)
         local anchors = cursor_anchors
           or (was_dirty and capture_status_cursors_before_reload(b) or capture_status_cursors(b))
         if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
-        if not reuse_details then pr_state.generation = pr_state.generation + 1 end
+        if not reuse_details then
+          pr_state.generation = pr_state.generation + 1
+          stop_pr_details()
+        end
         render_fast_status(true, reuse_details)
       end
       status_reload_by_buf[b] = reload_status
       local function invalidate_status()
         if not is_live() then return end
         pr_state.generation = pr_state.generation + 1
+        stop_pr_details()
         if utils.is_buf_visible(b) then reload_status()
         else status_dirty_by_buf[b] = true end
       end
@@ -1449,6 +1472,7 @@ function M.setup(group)
         once = true,
         callback = function()
           active = false
+          stop_pr_details()
           stop_metadata_watch()
           stop_worktree_watch()
           event_probe.stop()

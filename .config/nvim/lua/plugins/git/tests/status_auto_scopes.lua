@@ -32,6 +32,20 @@ local pr_reads = 0
 vim.fn.executable = function(name) return name == 'gh' and 1 or original_executable(name) end
 vim.system = function(argv, opts, callback)
   if argv[1] ~= 'gh' then return original_system(argv, opts, callback) end
+  if argv[2] == 'api' then
+    local payload = vim.json.decode(opts.stdin)
+    local number = tonumber(payload.query:match('pullRequest%(number:(%d+)%)'))
+    local pr
+    for _, item in ipairs(vim.list_extend(vim.deepcopy(branch_prs), all_prs)) do
+      if item.number == number then pr = vim.deepcopy(item) end
+    end
+    assert(pr, 'Unexpected summary identity')
+    pr.commits = { nodes = {} }
+    vim.schedule(function()
+      callback({ code = 0, stdout = vim.json.encode({ data = { repository = { p1 = pr } } }), stderr = '' })
+    end)
+    return { kill = function() end }
+  end
   local fields = argv[vim.fn.index(argv, '--json') + 2]
   assert(fields and fields:find('author', 1, true) and fields:find('createdAt', 1, true),
     'PR listing must request author and creation time')
@@ -69,6 +83,7 @@ local function colored(namespace, at, text, group)
   end
   return false
 end
+assert(vim.wait(5000, function() return row('[CI:— Review:— conflicts]') end, 10), 'PR summaries did not arrive')
 local pr_row = assert(row('#1 1d Other branch 日本語 @other other @other [CI:— Review:— conflicts]'))
 assert(colored('git_status_pull_requests', pr_row, 'other', 'GitBranch'))
 assert(colored('git_status_pull_requests', pr_row, '@other', 'Type'))
