@@ -6,13 +6,14 @@ local IMAGE_EXTENSIONS = { "png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "t
 local ACTIONS = {
   { id = "clipboard", label = "Clipboard", detail = "Paste image data from the clipboard" },
   { id = "screenshot", label = "Screenshot", detail = "Capture a screen region" },
+  { id = "screenshot_delayed", label = "Screenshot delay", detail = "Wait, then select a screen region" },
   { id = "file", label = "File", detail = "Choose an image file" },
   { id = "url", label = "URL", detail = "Download an image URL" },
   { id = "recent", label = "Recent", detail = "Reuse a recent LazyAgent image" },
 }
 
 local function action_label(item)
-  return string.format("%-10s %s", item.label, item.detail)
+  return string.format("%-16s %s", item.label, item.detail)
 end
 
 local function absolute_path(path)
@@ -253,6 +254,14 @@ function M.new(ctx)
         done(type(ctx.attach_clipboard) == "function" and ctx.attach_clipboard(bufnr) or nil)
       elseif action.id == "screenshot" then
         done(type(ctx.attach_screenshot) == "function" and ctx.attach_screenshot(bufnr) or nil)
+      elseif action.id == "screenshot_delayed" then
+        input({ prompt = "Screenshot delay (seconds): ", default = "5" }, function(seconds)
+          if seconds == nil or type(ctx.attach_screenshot) ~= "function" then
+            done(nil)
+            return
+          end
+          ctx.attach_screenshot(bufnr, seconds, done)
+        end)
       elseif action.id == "file" then
         local choose = pick_file or function(callback)
           fzf_file_picker(input, callback)

@@ -69,12 +69,28 @@ function M.register(create)
   })
 
   create("LazyAgentScreenShot", function(cmdargs)
-    run_for_scratch_or_agent(cmdargs, function(bufnr)
-      image_paste.screenshot_into_buffer(bufnr)
+    local args = vim.split(cmdargs.args or "", "%s+", { trimempty = true })
+    local agent, delay
+    if #args > 2 then
+      vim.notify("Usage: LazyAgentScreenShot [seconds] [agent]", vim.log.levels.ERROR)
+      return
+    elseif #args == 2 then
+      if tonumber(args[1]) then
+        delay, agent = args[1], args[2]
+      else
+        agent, delay = args[1], args[2]
+      end
+    elseif #args == 1 then
+      if tonumber(args[1]) then delay = args[1] else agent = args[1] end
+    end
+    local seconds = image_paste.screenshot_delay_seconds(delay)
+    if seconds == nil then return end
+    run_for_scratch_or_agent({ args = agent or "" }, function(bufnr)
+      image_paste.screenshot_into_buffer(bufnr, seconds)
     end, "LazyAgentScreenShot")
   end, {
-    nargs = "?",
-    desc = "Capture a screen region and insert it into LazyAgent scratch",
+    nargs = "*",
+    desc = "Capture a screen region into scratch after optional seconds: [seconds] [agent]",
   })
 end
 

@@ -1767,23 +1767,58 @@ function M.paste_current_buffer()
   return M.paste_into_buffer(vim.api.nvim_get_current_buf())
 end
 
-function M.screenshot_into_buffer(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local cfg, dir = attachment_context(bufnr)
-  if not cfg then
+function M.screenshot_delay_seconds(value)
+  local seconds = value == nil and 0 or tonumber(value)
+  if not seconds or seconds < 0 or seconds ~= seconds or seconds * 1000 > 2147483647 then
+    notify("invalid screenshot delay; use a non-negative number of seconds, e.g. 5", vim.log.levels.ERROR)
     return nil
   end
-
-  local image_path, source_or_err = capture_screenshot_image(dir)
-  if not image_path then
-    notify(source_or_err, vim.log.levels.ERROR)
-    return nil
-  end
-  return finalize_attachment(bufnr, image_path, source_or_err, cfg)
+  return seconds
 end
 
-function M.screenshot_current_buffer()
-  return M.screenshot_into_buffer(vim.api.nvim_get_current_buf())
+function M.screenshot_into_buffer(bufnr, delay, on_done)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local function finish(result)
+    if type(on_done) == "function" then
+      on_done(result)
+    end
+    return result
+  end
+  local seconds = M.screenshot_delay_seconds(delay)
+  if seconds == nil then
+    return finish(nil)
+  end
+  local cfg, dir = attachment_context(bufnr)
+  if not cfg then
+    return finish(nil)
+  end
+
+  local function capture()
+    -- The user can switch tmux windows or buffers during the delay. Keep the
+    -- original attachment target and skip capture if it was closed meanwhile.
+    if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+      return finish(nil)
+    end
+    local image_path, source_or_err = capture_screenshot_image(dir)
+    if not image_path then
+      notify(source_or_err, vim.log.levels.ERROR)
+      return finish(nil)
+    end
+    return finish(finalize_attachment(bufnr, image_path, source_or_err, cfg))
+  end
+
+  if seconds > 0 then
+    if cfg.notify ~= false then
+      notify(string.format("Screenshot selection starts in %g seconds; switch to the screen to capture", seconds))
+    end
+    vim.defer_fn(capture, math.ceil(seconds * 1000))
+    return true
+  end
+  return capture()
+end
+
+function M.screenshot_current_buffer(delay)
+  return M.screenshot_into_buffer(vim.api.nvim_get_current_buf(), delay)
 end
 
 local image_picker

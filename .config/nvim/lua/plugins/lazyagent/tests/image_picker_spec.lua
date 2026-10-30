@@ -248,6 +248,45 @@ function M.run()
     source = "recent image",
   }, "recent fzf image attachment")
   assert_equal(completed, "/stored/recent-fzf.png", "recent fzf picker completion")
+
+  local screenshots, capture_done = {}, nil
+  picker = image_picker.new({
+    capability = function() return { label = "ACP image input supported" } end,
+    attach_screenshot = function(bufnr, delay, done)
+      screenshots[#screenshots + 1] = { buf = bufnr, delay = delay }
+      capture_done = done
+      return "/stored/screenshot.png"
+    end,
+  })
+  completed = false
+  picker.open(17, {
+    select = choose_action("screenshot_delayed"),
+    input = function(opts, done)
+      assert_equal(opts.default, "5", "delayed screenshot defaults to five seconds")
+      done("7")
+    end,
+    on_done = function(result) completed = result end,
+  })
+  assert_equal(screenshots, { { buf = 17, delay = "7" } }, "delay input reaches capture with original buffer")
+  assert_equal(completed, false, "delayed picker completion waits for capture")
+  capture_done("/stored/delayed.png")
+  assert_equal(completed, "/stored/delayed.png", "delayed capture completes picker")
+
+  picker.open(17, {
+    select = choose_action("screenshot_delayed"),
+    input = function(_, done) done(nil) end,
+    on_done = function(result) completed = result end,
+  })
+  assert_equal(#screenshots, 1, "cancelling delay input starts no screenshot")
+  assert_equal(completed, nil, "cancelling delay input completes picker")
+
+  picker.open(17, {
+    select = choose_action("screenshot"),
+    input = function() error("immediate screenshot must not prompt for a delay") end,
+    on_done = function(result) completed = result end,
+  })
+  assert_equal(screenshots[2], { buf = 17 }, "existing screenshot action stays immediate")
+  assert_equal(completed, "/stored/screenshot.png", "immediate screenshot completion")
 end
 
 return M
