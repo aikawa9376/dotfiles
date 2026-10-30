@@ -93,6 +93,7 @@ local suites = {
   "tests.acp.view_footer_spec",
   "tests.acp.footer_animation_spec",
   "tests.acp.view_follow_spec",
+  "tests.acp.image_follow_spec",
   "tests.acp.smooth_scroll_spec",
   "tests.acp.redraw_spec",
   "tests.acp.view_lifecycle_spec",

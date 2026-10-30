@@ -1396,6 +1396,14 @@ local image_preview = require("lazyagent.logic.image_preview").new({
   load_snacks = load_snacks,
   extract_reference = extract_image_reference,
   is_acp_buffer = is_acp_transcript_buffer,
+  on_layout_changed = function(bufnr)
+    -- The view imports image_paste; use the initialized adapter without making
+    -- scratch previews load the ACP view or creating a require cycle.
+    local view = package.loaded["lazyagent.acp.view_buffer"]
+    if type(view) == "table" and type(view._on_image_layout_changed) == "function" then
+      view._on_image_layout_changed(bufnr)
+    end
+  end,
   on_buffer_changed = function(bufnr)
     if process_dropped_image_lines then
       process_dropped_image_lines(bufnr)

@@ -534,6 +534,20 @@ function M.new(ctx)
     end
   end
 
+  function M._on_image_layout_changed(bufnr)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or not is_acp_buffer(bufnr)
+      or not should_follow_output(bufnr)
+    then
+      return false
+    end
+    -- Adding/removing image virtual rows can move topline/topfill in either
+    -- direction. Keep follow intent through the resulting WinScrolled event;
+    -- upward user input still invalidates the existing reflow exemption.
+    M._expect_follow_reflow(bufnr)
+    scroll_buffer_to_end(bufnr, { reset_view = true })
+    return true
+  end
+
   function M._sync_follow_after_scroll(bufnr, win, scroll)
     if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
       return false

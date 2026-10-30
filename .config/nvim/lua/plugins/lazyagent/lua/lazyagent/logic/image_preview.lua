@@ -28,6 +28,12 @@ function M.new(ctx)
     return type(ctx.is_acp_buffer) == "function" and ctx.is_acp_buffer(bufnr) == true
   end
 
+  local function layout_changed(bufnr)
+    if valid_buffer(bufnr) and is_acp_buffer(bufnr) and type(ctx.on_layout_changed) == "function" then
+      ctx.on_layout_changed(bufnr)
+    end
+  end
+
   local function visible_windows(bufnr)
     if not valid_buffer(bufnr) then
       return {}
@@ -53,6 +59,7 @@ function M.new(ctx)
       return
     end
     call_method(item.placement, "close")
+    layout_changed(bufnr)
     if valid_buffer(bufnr) then
       pcall(api.nvim_buf_del_extmark, bufnr, preview_ns, mark_id)
     end
@@ -155,6 +162,11 @@ function M.new(ctx)
     }
 
     if is_acp_buffer(bufnr) then
+      -- Conversion and placement updates are asynchronous. Re-anchor only once
+      -- Snacks has actually changed its virtual rows, not when scanning starts.
+      placement.on_update = function()
+        layout_changed(bufnr)
+      end
       local width
       local height
       for _, win in ipairs(windows) do
