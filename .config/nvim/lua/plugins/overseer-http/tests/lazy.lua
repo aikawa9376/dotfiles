@@ -1,6 +1,7 @@
 -- nvim --headless --clean -u NONE -l tests/lazy.lua
 local source = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
-local config = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source))))
+local root = vim.fs.dirname(vim.fs.dirname(source))
+local config = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(root)))
 local plugins = vim.fn.stdpath('data') .. '/lazy'
 vim.opt.rtp:prepend(config)
 vim.opt.rtp:prepend(plugins .. '/lazy.nvim')
@@ -20,6 +21,7 @@ local ok, err = xpcall(function()
     performance = { rtp = { reset = false } },
   })
   local specs = require('lazy.core.config').plugins
+  assert(vim.uv.fs_realpath(specs['overseer-http.nvim'].dir) == vim.uv.fs_realpath(root))
   assert(not specs['overseer.nvim']._.loaded)
   assert(vim.fn.exists(':OverseerHttpSelect') == 2)
   local file = fixture .. '/api.http'

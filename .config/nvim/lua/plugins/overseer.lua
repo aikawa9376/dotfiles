@@ -1,7 +1,7 @@
 return {
   'stevearc/overseer.nvim',
   dependencies = {
-    { dir = vim.fn.stdpath('config') .. '/local/overseer-http.nvim', name = 'overseer-http.nvim', lazy = true },
+    { import = 'plugins.overseer-http' },
   },
   cmd = {
     'OverseerRun', 'OverseerToggle', 'OverseerWatch',

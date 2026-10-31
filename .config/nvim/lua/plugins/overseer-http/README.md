@@ -16,7 +16,7 @@ Content-Type: application/json
 {"name":"foo"}
 ```
 
-The local plugin is loaded as an Overseer dependency in this dotfiles repository. Its setup is called from `lua/plugins/overseer.lua` after `overseer.setup()`.
+The local plugin lives in `lua/plugins/overseer-http/`, alongside the other local plugins in this dotfiles repository. Its `init.lua` defines the Lazy spec, imported as an Overseer dependency by `lua/plugins/overseer.lua`. Its setup is called after `overseer.setup()`.
 
 For another Lazy configuration, the equivalent setup is:
 
