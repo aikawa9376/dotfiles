@@ -18,9 +18,11 @@ function M.run()
   }
   local scrolls_to_end = 0
   local read_notifications = 0
+  local deferred_output = false
   local api = {}
   local windowing = require("lazyagent.acp.view_buffer.windowing").new({
     api = api,
+    buffer_has_deferred_updates = function() return deferred_output end,
     pane_config = pane_config,
     pane_buffers = { ["follow-test"] = bufnr },
     layout_state = {},
@@ -129,6 +131,11 @@ function M.run()
   assert_equal(pane_config["follow-test"].follow_output, true, "downward scroll to end resumes follow")
   assert_equal(scrolls_to_end, 2, "downward return scrolls to end once")
   assert_equal(read_notifications, 2, "downward return marks the visible transcript read")
+  deferred_output = true
+  assert_equal(api._notify_transcript_read(bufnr), false, "undrawn output is not considered read")
+  assert_equal(read_notifications, 2, "deferred output does not acknowledge completion")
+  deferred_output = false
+  assert_equal(api._notify_transcript_read(bufnr), true, "drawn output at the visible end is read")
 
   api._expect_follow_reflow(bufnr)
   api._sync_follow_after_scroll(bufnr, win, { topline = -10 })

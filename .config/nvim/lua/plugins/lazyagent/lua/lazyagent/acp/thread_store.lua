@@ -469,6 +469,11 @@ function Store:update(thread_id, changes, opts)
     then
       return nil, { code = "stale_test" }
     end
+    if opts.expected_completion_id ~= nil
+      and ((current.metadata.cockpit_completion or {}).id or vim.NIL) ~= opts.expected_completion_id
+    then
+      return nil, { code = "stale_completion" }
+    end
     if opts.expected_cockpit_version ~= nil
       and require("lazyagent.acp.cockpit_review").version(current) ~= opts.expected_cockpit_version
     then

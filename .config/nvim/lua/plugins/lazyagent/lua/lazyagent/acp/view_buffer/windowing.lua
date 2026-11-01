@@ -468,6 +468,7 @@ function M.new(ctx)
       and vim.api.nvim_buf_is_valid(bufnr)
       and is_acp_buffer(bufnr)
       and buffer_is_visible(bufnr)
+      and not (ctx.buffer_has_deferred_updates and ctx.buffer_has_deferred_updates(bufnr))
       and should_follow_output(bufnr)
       and M._any_window_at_transcript_end(bufnr)
   end

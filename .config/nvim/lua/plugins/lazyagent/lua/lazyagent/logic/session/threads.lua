@@ -955,6 +955,7 @@ function M.setup(deps)
     local original_acp_winhighlights = {}
     local refresh
     local maybe_mark_preview_read
+    local preview_completion_id, preview_has_response
     local preview_augroup = vim.api.nvim_create_augroup(
       "LazyAgentACPCockpitPreview" .. tostring(bufnr),
       { clear = true }
@@ -1173,17 +1174,21 @@ function M.setup(deps)
     end
 
     maybe_mark_preview_read = function()
-      if preview_mode ~= "mirror"
+      if preview_mode == "details" or not preview_has_response
         or not preview_thread_id
         or not preview_winid
         or not vim.api.nvim_win_is_valid(preview_winid)
         or not preview_bufnr
         or not vim.api.nvim_buf_is_valid(preview_bufnr)
+        or vim.api.nvim_win_get_tabpage(preview_winid) ~= vim.api.nvim_get_current_tabpage()
       then
         return false
       end
       local thread = stored_thread(preview_thread_id)
-      if not thread or thread.unread ~= true then return false end
+      if not thread then return false end
+      local metadata = thread.metadata or {}
+      if thread.unread ~= true and (preview_completion_id == vim.NIL
+        or metadata.cockpit_ack_completion == preview_completion_id) then return false end
       local line_count = math.max(1, vim.api.nvim_buf_line_count(preview_bufnr))
       local info = vim.fn.getwininfo(preview_winid)[1]
       local cursor = vim.api.nvim_win_get_cursor(preview_winid)[1]
@@ -1196,12 +1201,11 @@ function M.setup(deps)
       local active_backend = session and state.backends and state.backends[session.backend]
         or (session and backend_for_provider(agent_name) or nil)
         or backend
-      if type(active_backend.mark_thread_read) ~= "function"
-        or not active_backend.mark_thread_read(thread.thread_id)
-      then
-        return false
-      end
+      if type(active_backend.mark_thread_read) ~= "function" then return false end
+      local updated = active_backend.mark_thread_read(thread.thread_id, { completion_id = preview_completion_id })
+      if not updated then return false end
       thread.unread = false
+      thread.metadata = updated.metadata
       vim.schedule(function()
         if refresh and vim.api.nvim_buf_is_valid(bufnr) then refresh() end
       end)
@@ -1219,9 +1223,14 @@ function M.setup(deps)
           local signature
           local known_signature = not force and preview_thread_id == thread.thread_id and preview_signature or nil
           lines, signature = mirror_snapshot(thread, known_signature)
-          if not lines or known_signature == signature then return end
+          if not lines or known_signature == signature then
+            preview_completion_id = ((thread.metadata or {}).cockpit_completion or {}).id or vim.NIL
+            vim.schedule(maybe_mark_preview_read)
+            return
+          end
           preview_thread_id = thread.thread_id
           preview_signature = signature
+          preview_has_response = #lines > 0 and signature ~= "empty:" .. tostring(thread.thread_id)
           if #lines == 0 then lines = { "_The transcript is currently empty._" } end
           if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
             vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· Mirror · "
@@ -1242,6 +1251,7 @@ function M.setup(deps)
               and vim.api.nvim_win_get_height(preview_winid)
             or 10
           local response = require("lazyagent.acp.cockpit").latest_response(thread, math.max(1, height - 3))
+          preview_has_response = #response > 0
           if #response == 0 then response = { "_No assistant response yet._" } end
           vim.list_extend(lines, response)
           if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
@@ -1250,6 +1260,7 @@ function M.setup(deps)
         end
       end
       preview_thread_id = thread and thread.thread_id or nil
+      preview_completion_id = thread and (((thread.metadata or {}).cockpit_completion or {}).id or vim.NIL) or vim.NIL
       local previous_count = vim.api.nvim_buf_line_count(preview_bufnr)
       local follow = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
         and vim.api.nvim_win_get_cursor(preview_winid)[1] >= previous_count
@@ -1260,7 +1271,7 @@ function M.setup(deps)
       if follow and preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
         pcall(vim.api.nvim_win_set_cursor, preview_winid, { math.max(1, #lines), 0 })
       end
-      if preview_mode == "mirror" then
+      if preview_mode ~= "details" then
         vim.schedule(maybe_mark_preview_read)
       end
     end
@@ -2072,6 +2083,11 @@ function M.setup(deps)
         for root in pairs(fingerprint_checks) do invalidate_fingerprint(root) end
         pending_refresh = true
       end,
+    })
+    vim.api.nvim_create_autocmd("User", {
+      group = preview_augroup,
+      pattern = "LazyAgentCockpitRead",
+      callback = function() pending_refresh = true end,
     })
     vim.api.nvim_create_autocmd("BufWritePost", {
       group = preview_augroup,

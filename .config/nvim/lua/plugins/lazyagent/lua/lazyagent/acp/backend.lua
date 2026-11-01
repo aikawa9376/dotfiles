@@ -713,6 +713,15 @@ local function create_backend(default_view)
         id = finished and finished.turn_id or tostring((vim.uv or vim.loop).hrtime()),
         finished_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
       } } })
+      local completion = session.thread_record and session.thread_record.metadata.cockpit_completion
+      vim.schedule(function()
+        if sessions[session.pane_id] == session and completion
+          and session.view and type(session.view.transcript_is_read) == "function"
+          and session.view.transcript_is_read(session.pane_id)
+        then
+          backend.mark_thread_read(session.thread_id, { completion_id = completion.id })
+        end
+      end)
       util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
       actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
       config_helpers.maybe_save_turn_to_brain(session, pending.prompt, pending.start_seq)
@@ -1227,8 +1236,13 @@ local function create_backend(default_view)
         session.thread_store_error = tostring(thread_err)
       end
       session.on_transcript_read = function()
-        if sessions[pane_id] == session and session.thread_record and session.thread_record.unread == true then
-          sync_thread_record(session, { unread = false })
+        if sessions[pane_id] == session and session.thread_record then
+          local record = session.thread_record
+          local metadata = record.metadata or {}
+          local completion = metadata.cockpit_completion
+          if record.unread == true or (completion and completion.id ~= metadata.cockpit_ack_completion) then
+            backend.mark_thread_read(session.thread_id)
+          end
         end
       end
       session.protocol_log_path = session.protocol_log and (
@@ -1910,8 +1924,23 @@ local function create_backend(default_view)
     return backend.update_thread(thread_id, { draft = tostring(draft or "") }, { skip_unchanged = true })
   end
 
-  function backend.mark_thread_read(thread_id)
-    return backend.update_thread(thread_id, { unread = false }, { skip_unchanged = true })
+  function backend.mark_thread_read(thread_id, opts)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then return nil, err end
+    local metadata = thread.metadata or {}
+    local completion_id = (metadata.cockpit_completion or {}).id or vim.NIL
+    local expected_id = opts and opts.completion_id or completion_id
+    if expected_id ~= completion_id then return nil, { code = "stale_completion" } end
+    local changes = { unread = false }
+    if completion_id ~= vim.NIL and metadata.cockpit_ack_completion ~= completion_id then
+      changes.metadata = { cockpit_ack_completion = completion_id }
+    end
+    local changed = thread.unread == true or changes.metadata ~= nil
+    local updated, update_err = backend.update_thread(thread_id, changes, {
+      skip_unchanged = true, preserve_updated_at = true, expected_completion_id = expected_id,
+    })
+    if updated and changed then util.fire_event("CockpitRead", { thread_id = thread_id }) end
+    return updated, update_err
   end
 
   function backend.get_pane_pid(pane_id)

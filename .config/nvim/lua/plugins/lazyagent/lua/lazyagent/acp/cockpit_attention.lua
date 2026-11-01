@@ -43,7 +43,7 @@ function M.summarize(thread, runtime, opts)
   end
   local completion = metadata.cockpit_completion
   if type(completion) == "table" and completion.id and metadata.cockpit_ack_completion ~= completion.id then
-    add("completion", "Completed · not acknowledged", completion.id, 4)
+    add("completion", "Completed · response unread", completion.id, 4)
   end
   local review = opts.review or {}
   if review.state == "needs_review" or review.state == "ready_for_review" then

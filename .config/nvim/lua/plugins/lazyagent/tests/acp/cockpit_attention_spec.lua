@@ -16,7 +16,7 @@ function M.run()
   }
   local attention = Cockpit.attention(thread, runtime)
   assert(#attention.items == 2 and attention.items[1].kind == "elicitation", "input and unacknowledged completion are separate")
-  assert(Cockpit.needs_attention(thread, runtime), "read transcript does not acknowledge completion")
+  assert(Cockpit.needs_attention(thread, runtime), "legacy unread=false alone does not acknowledge a completion")
   local snoozed = { [thread.thread_id] = { signature = attention.signature, until_at = 200 } }
   assert(not Cockpit.needs_attention(thread, runtime, { snoozed = snoozed, now = 100 }), "snooze hides matching attention")
   assert(Cockpit.needs_attention(thread, runtime, { snoozed = snoozed, now = 200 }), "snooze expires")

@@ -82,6 +82,14 @@ function M.run()
     records[thread_id] = nil
     return true
   end
+  function backend.mark_thread_read(thread_id, opts)
+    local record = records[thread_id]
+    local completion_id = ((record.metadata or {}).cockpit_completion or {}).id or vim.NIL
+    if opts.completion_id ~= completion_id then return nil, { code = "stale_completion" } end
+    record.unread = false
+    if completion_id ~= vim.NIL then record.metadata.cockpit_ack_completion = completion_id end
+    return vim.deepcopy(record)
+  end
   function backend.list_threads()
     list_reads = list_reads + 1
     return vim.tbl_values(records)
@@ -559,10 +567,55 @@ function M.run()
     vim.api.nvim_get_option_value("fillchars", { win = preview_winid }):find("eob: ", 1, true),
     "cockpit preview hides end-of-buffer tildes"
   )
+  local read_metadata = vim.deepcopy(records[THREAD_ID].metadata)
+  local original_snapshot = backend.get_view_snapshot
+  backend.get_view_snapshot = function()
+    local lines = { "# Assistant" }
+    for index = 1, 200 do lines[#lines + 1] = "Response line " .. index end
+    return { source = "buffer", lines = lines, line_count = #lines, changedtick = 8 }
+  end
+  records[THREAD_ID].metadata.cockpit_completion = { id = "mirror-response" }
+  records[THREAD_ID].unread = false
+  vim.cmd("normal r")
+  vim.api.nvim_win_set_cursor(preview_winid, { 1, 0 })
+  vim.wait(80, function() return false end, 10)
+  assert_equal(records[THREAD_ID].metadata.cockpit_ack_completion, nil, "mirror scrollback does not acknowledge completion")
+  vim.api.nvim_win_call(preview_winid, function()
+    vim.cmd("normal! G")
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = cockpit_preview_bufnr })
+  end)
+  assert(vim.wait(1000, function()
+    return records[THREAD_ID].metadata.cockpit_ack_completion == "mirror-response"
+  end, 10), "viewing the mirror end acknowledges completion even when already read")
+  backend.get_view_snapshot = original_snapshot
+  records[THREAD_ID].metadata.cockpit_completion = { id = "summary-response" }
+  records[THREAD_ID].unread = true
   vim.cmd("normal \r")
   local latest_lines = vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false)
   assert_equal(vim.bo[cockpit_preview_bufnr].filetype, "lazyagent_acp", "latest response retains the ACP Markdown adapter")
   assert(table.concat(latest_lines, "\n"):find("ready", 1, true), "cockpit enter toggles back to latest response")
+  assert(vim.wait(1000, function()
+    return records[THREAD_ID].metadata.cockpit_ack_completion == "summary-response"
+  end, 10), "latest response preview acknowledges completion")
+  assert_equal(records[THREAD_ID].unread, false, "latest response preview marks read")
+  records[THREAD_ID].metadata.cockpit_completion = { id = "preview-before-new-response" }
+  vim.cmd("normal r")
+  records[THREAD_ID].metadata.cockpit_completion = { id = "preview-after-new-response" }
+  records[THREAD_ID].unread = true
+  vim.wait(80, function() return false end, 10)
+  assert_equal(records[THREAD_ID].metadata.cockpit_ack_completion, "summary-response", "pending preview read cannot acknowledge unseen completion")
+  assert_equal(records[THREAD_ID].unread, true, "pending preview read preserves newer unread state")
+  backend.get_view_snapshot = function()
+    return { source = "buffer", lines = {}, line_count = 0, changedtick = 9 }
+  end
+  vim.cmd("normal \r")
+  vim.wait(80, function() return false end, 10)
+  assert_equal(records[THREAD_ID].metadata.cockpit_ack_completion, "summary-response", "empty mirror cannot acknowledge completion")
+  backend.get_view_snapshot = original_snapshot
+  vim.cmd("normal \r")
+  records[THREAD_ID].metadata = read_metadata
+  records[THREAD_ID].unread = false
+  vim.cmd("normal r")
 
   local Cockpit = require("lazyagent.acp.cockpit")
   local original_response = Cockpit.latest_response

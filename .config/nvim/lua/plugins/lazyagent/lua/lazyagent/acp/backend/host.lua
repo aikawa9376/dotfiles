@@ -687,8 +687,8 @@ function M.setup(deps)
         and type(session.view.transcript_is_read) == "function"
         and session.view.transcript_is_read(session.pane_id)
       if transcript_is_read then
-        if session.thread_record and session.thread_record.unread == true then
-          sync_thread(session, { unread = false })
+        if type(session.on_transcript_read) == "function" then
+          session.on_transcript_read()
         end
       elseif state.open_agent ~= session.agent_name
           and session.thread_record

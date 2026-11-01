@@ -953,6 +953,7 @@ function M.new(ctx)
     refresh_buffer_from_file = refresh_buffer_from_file,
     flush_pending_append = flush_pending_append,
     discard_pending_append = discard_pending_append,
+    buffer_has_deferred_updates = buffer_has_deferred_updates,
     resume_deferred_updates_for_buffer = resume_deferred_updates_for_buffer,
     resume_deferred_transcript_updates = resume_deferred_transcript_updates,
     queue_append = queue_append,

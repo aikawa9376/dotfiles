@@ -572,8 +572,15 @@ function M.run()
       and snapshot.acp_config_options[1].currentValue == false
   end, 10), "saved config should be restored")
 
+  assert(backend.update_thread(runtime.acp_thread_id, {
+    metadata = { cockpit_completion = { id = "read-response" }, cockpit_ack_completion = "previous-response" },
+  }))
+  local read_activity_time = assert(store:get(runtime.acp_thread_id)).updated_at
   assert(backend.mark_thread_read(runtime.acp_thread_id))
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_unread, false, "thread read state")
+  assert_equal(assert(store:get(runtime.acp_thread_id)).metadata.cockpit_ack_completion, "read-response",
+    "reading also acknowledges the completed response")
+  assert_equal(assert(store:get(runtime.acp_thread_id)).updated_at, read_activity_time, "reading preserves activity time")
   local writefile = vim.fn.writefile
   local read_mark_writes = 0
   vim.fn.writefile = function(lines, path, ...)
@@ -591,6 +598,18 @@ function M.run()
   assert(backend.update_thread(runtime.acp_thread_id, { unread = true }))
   on_transcript_read()
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_unread, false, "returning to transcript end marks read")
+  assert(backend.update_thread(runtime.acp_thread_id, { metadata = { cockpit_completion = { id = "already-read-response" } } }))
+  on_transcript_read()
+  assert_equal(assert(store:get(runtime.acp_thread_id)).metadata.cockpit_ack_completion, "already-read-response",
+    "visible transcript acknowledges completion even when unread was already false")
+  assert(backend.update_thread(runtime.acp_thread_id, {
+    unread = true, metadata = { cockpit_completion = { id = "newer-response" } },
+  }))
+  local stale_read, stale_read_err = backend.mark_thread_read(runtime.acp_thread_id, { completion_id = "already-read-response" })
+  assert_equal(stale_read, nil, "a delayed preview cannot acknowledge a newer response")
+  assert_equal(stale_read_err.code, "stale_completion", "delayed preview read guard")
+  assert_equal(assert(store:get(runtime.acp_thread_id)).unread, true, "delayed preview preserves unread")
+  on_transcript_read()
   assert(backend.set_thread_draft(runtime.acp_thread_id, "updated draft"))
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_draft, "updated draft", "thread draft update")
 
@@ -611,6 +630,39 @@ function M.run()
     "local carryover should be visible in transcript"
   )
   backend.kill_pane(pane_id)
+
+  local completion_pane
+  backend.split(nil, 10, false, {
+    on_split = function(created) completion_pane = created end,
+    acp = {
+      agent_name = "CompletionFixture", command = fake_command, cwd = root, root_dir = root,
+      additional_directories = { root .. "/tests" },
+      env = { LAZYAGENT_FAKE_SIMPLE_PROMPT = "1" },
+    },
+  })
+  assert(vim.wait(5000, function()
+    return backend.get_runtime_snapshot(completion_pane).acp_ready
+  end, 10), "completion fixture becomes ready")
+  local completion_thread = backend.get_runtime_snapshot(completion_pane).acp_thread_id
+  state.open_agent = nil
+  transcript_is_read = false
+  backend.paste_and_submit(completion_pane, "exercise hidden completion")
+  assert(vim.wait(5000, function()
+    return assert(store:get(completion_thread)).metadata.cockpit_completion ~= nil
+  end, 10), "hidden response completes")
+  local unseen = assert(store:get(completion_thread))
+  assert(unseen.unread and unseen.metadata.cockpit_ack_completion ~= unseen.metadata.cockpit_completion.id,
+    "hidden completion remains unread and unacknowledged")
+  transcript_is_read = true
+  backend.paste_and_submit(completion_pane, "exercise visible completion")
+  assert(vim.wait(5000, function()
+    local record = assert(store:get(completion_thread))
+    return record.metadata.cockpit_completion.id ~= unseen.metadata.cockpit_completion.id
+      and record.metadata.cockpit_ack_completion == record.metadata.cockpit_completion.id
+  end, 10), "completion while viewing the transcript end is acknowledged without cursor motion")
+  transcript_is_read = false
+  state.open_agent = previous_open_agent
+  backend.kill_pane(completion_pane)
 
   local parallel_panes = {}
   for index = 1, 2 do

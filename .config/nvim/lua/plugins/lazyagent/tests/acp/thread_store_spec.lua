@@ -140,6 +140,15 @@ function M.run()
   })
   assert_equal(old_test, nil, "old test completion cannot replace a newer run")
   assert_equal(old_test_err.code, "stale_test", "test run identity guard")
+  assert(store:update(THREAD_ID, { unread = true, metadata = { cockpit_completion = { id = "new-response" } } }))
+  for _, expected_id in ipairs({ "old-response", vim.NIL }) do
+    local stale_read, stale_read_err = store:update(THREAD_ID, {
+      unread = false, metadata = { cockpit_ack_completion = "old-response" },
+    }, { expected_completion_id = expected_id })
+    assert_equal(stale_read, nil, "a stale read cannot acknowledge a newer completion")
+    assert_equal(stale_read_err.code, "stale_completion", "completion identity is checked under lock")
+    assert_equal(assert(store:get(THREAD_ID)).unread, true, "stale read preserves newer unread output")
+  end
   local Review = require("lazyagent.acp.cockpit_review")
   local old_review_version = Review.version(assert(store:get(THREAD_ID)))
   assert(store:update(THREAD_ID, { metadata = { cockpit_review = { state = "reviewing", revision = "new" } } }))
