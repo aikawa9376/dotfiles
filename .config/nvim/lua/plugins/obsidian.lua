@@ -35,6 +35,9 @@ return {
     "ObsidianSidebar",
     "ObsidianDashboard",
   },
+  keys = {
+    { "<Leader>m", "<cmd>ObsidianQuickSwitch<CR>", mode = "n", silent = true, desc = "Switch Obsidian note" },
+  },
   dependencies = "obsidian-extension",
   opts = function()
     local vault = vim.env.OBSIDIAN_VAULT
