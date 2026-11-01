@@ -133,4 +133,12 @@ assert(captured_opts.previewer.parse_entry({}, colored_today) == "/vault/daily/2
   "Obsidian picker preview resolves the selected display")
 assert(fake_fzf.fzf_exec == original_fake_exec, "fzf_exec restored after picker setup")
 
+local search_request
+package.loaded["obsidian_extension.features.note_search"] = {
+  open = function(self, search_opts) search_request = { self, search_opts } end,
+}
+FakeFzfPicker.grep_notes(picker, { query = "fuzzy body" })
+assert(search_request[1] == picker and search_request[2].query == "fuzzy body",
+  "ObsidianSearch uses the fuzzy note source and preserves its initial query")
+
 print("ok - fzf_picker_spec")

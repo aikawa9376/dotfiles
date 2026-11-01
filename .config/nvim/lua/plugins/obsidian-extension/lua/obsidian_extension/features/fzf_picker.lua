@@ -228,6 +228,10 @@ function M.setup()
     return
   end
 
+  FzfPicker.grep_notes = function(self, opts)
+    return require("obsidian_extension.features.note_search").open(self, opts)
+  end
+
   local original_make_display = FzfPicker._make_display
   FzfPicker._make_display = function(self, entry)
     local display, highlights = original_make_display(self, entry)
