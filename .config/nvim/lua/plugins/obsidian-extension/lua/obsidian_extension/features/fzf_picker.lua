@@ -281,7 +281,8 @@ function M.setup()
       selection_mappings = self:_note_selection_mappings()
     end
 
-    vim.system(self:_build_find_cmd(), {
+    local cmd = vim.list_extend(vim.deepcopy(self:_build_find_cmd()), { "--sortr=modified" })
+    vim.system(cmd, {
       cwd = tostring(self.client.dir),
       text = true,
     }, vim.schedule_wrap(function(result)

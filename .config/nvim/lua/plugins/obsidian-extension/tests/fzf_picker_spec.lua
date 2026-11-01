@@ -141,4 +141,23 @@ FakeFzfPicker.grep_notes(picker, { query = "fuzzy body" })
 assert(search_request[1] == picker and search_request[2].query == "fuzzy body",
   "ObsidianSearch uses the fuzzy note source and preserves its initial query")
 
+local fixture = vim.fn.tempname()
+vim.fn.mkdir(fixture, "p")
+vim.fn.writefile({ "older" }, fixture .. "/a.md")
+vim.fn.writefile({ "newer" }, fixture .. "/z.md")
+assert(vim.uv.fs_utime(fixture .. "/a.md", 100, 100))
+assert(vim.uv.fs_utime(fixture .. "/z.md", 200, 200))
+package.loaded["obsidian.note"] = { from_file = function() return { aliases = {} } end }
+picker.client = { dir = fixture, opts = {} }
+picker._build_find_cmd = function()
+  return { "rg", "--no-config", "--files", "--type=md", "--sort=path" }
+end
+local found
+picker.pick = function(_, entries) found = entries end
+FakeFzfPicker.find_notes(picker, { no_default_mappings = true })
+assert(vim.wait(5000, function() return found ~= nil end))
+assert(found[1].filename == fixture .. "/z.md", "QuickSwitch starts newest-first even with stale client sort options")
+assert(found[2].filename == fixture .. "/a.md", "QuickSwitch keeps the older file below the newer file")
+vim.fn.delete(fixture, "rf")
+
 print("ok - fzf_picker_spec")
