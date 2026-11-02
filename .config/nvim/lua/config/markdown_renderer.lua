@@ -18,4 +18,19 @@ function M.get()
   end
 end
 
+-- Inspect only loaded state: focus events must not load a Markdown renderer.
+function M.typography_active()
+  local typography = package.loaded['inkstone.core.typography']
+  if type(typography) ~= 'table' then return false end
+  local tab = vim.api.nvim_get_current_tabpage()
+  for buf, state in pairs(typography.active or {}) do
+    local win = state.win
+    if #state.entries > 0 and vim.api.nvim_win_is_valid(win)
+      and vim.api.nvim_win_get_tabpage(win) == tab and vim.api.nvim_win_get_buf(win) == buf then
+      return true
+    end
+  end
+  return false
+end
+
 return M

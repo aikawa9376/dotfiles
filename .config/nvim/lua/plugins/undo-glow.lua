@@ -112,6 +112,8 @@ return {
     vim.api.nvim_create_autocmd("FocusGained", {
       desc = "Highlight when focus gained",
       callback = function()
+        -- Focus animation repeatedly redraws the terminal-only heading overlay.
+        if require("config.markdown_renderer").typography_active() then return end
         ---@type UndoGlow.CommandOpts
         local opts = {
           animation = {
