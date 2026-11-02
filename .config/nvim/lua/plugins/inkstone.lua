@@ -111,6 +111,7 @@ return {
         },
         gitpr = {
           sign = { enabled = false },
+          typography = { enabled = false },
           heading = { sign = false },
           code = vim.tbl_extend('force', code_padding, { sign = false }),
         },
