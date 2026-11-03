@@ -41,7 +41,7 @@
   "hlchunk.nvim": { "branch": "main", "commit": "4ddc056e4ca45f1c7dc6aa21935df710b263b1aa" },
   "hydra.nvim": { "branch": "main", "commit": "8c4a9f621ec7cdc30411a1f3b6d5eebb12b469dc" },
   "incline.nvim": { "branch": "main", "commit": "debd628e9395f7a9da57bdc31ce75ca6b40a880b" },
-  "inkstone.nvim": { "branch": "experiment/rust-image-typography", "commit": "69cc30318a0a11fd4231faa56b2bed449031580f" },
+  "inkstone.nvim": { "branch": "experiment/rust-image-typography", "commit": "427f2c6f6eaf9ee06001303218de7015327e229c" },
   "is.vim": { "branch": "master", "commit": "d393cb346dcdf733fecd7bbfc45b70b8c05e9eb4" },
   "junkfile.vim": { "branch": "master", "commit": "a40cd5b8c912693ab2b4af6ce9203ee8cc606eba" },
   "kitty-scrollback.nvim": { "branch": "main", "commit": "4994c85e0f291598d0748488653c83cb698fd281" },
