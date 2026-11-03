@@ -3,7 +3,7 @@ local file_types = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'la
 
 return {
   "aikawa9376/inkstone.nvim",
-  branch = "experiment/rust-image-typography",
+  branch = "main",
   build = "make raster",
   ft = file_types,
   opts = {
