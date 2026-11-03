@@ -22,6 +22,8 @@ end
 function M.typography_active()
   local typography = package.loaded['inkstone.core.typography']
   if type(typography) ~= 'table' then return false end
+  if type(typography.visible) == 'function' then return typography.visible() end
+  -- Compatibility with the text backend before the shared visibility query.
   local tab = vim.api.nvim_get_current_tabpage()
   for buf, state in pairs(typography.active or {}) do
     local win = state.win

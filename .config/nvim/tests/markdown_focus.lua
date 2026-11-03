@@ -24,7 +24,16 @@ assert(normal().bg == 0x002b36 and glows == 1)
 local tab, win, buf = vim.api.nvim_get_current_tabpage(), vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
 local state = { win = win, entries = { {} } }
 package.loaded['inkstone.core.typography'] = { active = { [buf] = state } }
+-- New renderers own the decision for text and image placeholders alike.
+local shown = true
+package.loaded['inkstone.core.typography'] = { visible = function() return shown end }
+assert(integration.typography_active(), 'the shared query must protect image typography')
 local before = normal()
+focus()
+assert(vim.deep_equal(normal(), before) and glows == 1)
+shown = false
+assert(not integration.typography_active(), 'hidden images must retain ordinary focus behavior')
+package.loaded['inkstone.core.typography'] = { active = { [buf] = state } }
 for _ = 1, 3 do
   assert(integration.typography_active())
   vim.api.nvim_exec_autocmds('FocusLost', {})

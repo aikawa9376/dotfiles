@@ -142,7 +142,7 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 vim.api.nvim_create_autocmd("FocusGained", {
   pattern = "*",
   callback = function()
-    -- Default-color changes clear terminal-only sized text before its repair.
+    -- Focus colors invalidate heading rasters as well as terminal-only sized text.
     if require("config.markdown_renderer").typography_active() then return end
     set_highlight("Normal", { bg = "#002b36", fg = "#839496" })
   end
