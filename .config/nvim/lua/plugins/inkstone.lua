@@ -3,7 +3,8 @@ local file_types = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'la
 
 return {
   "aikawa9376/inkstone.nvim",
-  main = "inkstone",
+  branch = "experiment/rust-image-typography",
+  build = "make raster",
   ft = file_types,
   opts = {
     -- restart_highlighter = true,
@@ -15,6 +16,10 @@ return {
       return (vim.bo[buf].filetype == 'gitpr' or vim.bo[buf].filetype == 'gitissue') and vim.b[buf].git_pr_markdown_ranges == nil
     end,
     paragraph = { wrap = true, join = false },
+    typography = {
+      backend = "image",
+      image = { font = "Liga Plemol Console NF" },
+    },
     heading = {
       sign = false,
       position = "inline",
