@@ -35,6 +35,7 @@ a file keeps Diffview's file action.
 
 | Key | Action |
 | --- | --- |
+| `gO` | Open the file's working-tree directory in a new Oil tab |
 | `gp` | Open a related PR, selecting among several when needed |
 | `gA` | Existing GitHub action menu for the selected related PR |
 | `gR` | Refresh related PRs and comments |
@@ -42,8 +43,12 @@ a file keeps Diffview's file action.
 | `]t` / `[t` | Cycle mapped PR comments across both panes of the current file |
 | `gct` | List all related PR review threads, including outdated and file-level comments |
 
-These keys work in diff buffers, the file panel and the history panel. The PR
-screen provides conversation, reviews, metadata and CI operations. Its `D`
+These keys work in diff buffers, the file panel and the history panel. `gO`
+uses the file under the panel cursor, or the displayed file in a diff pane.
+Single-file history commit rows use their historical file.
+Headers, directory rows and PR rows are ignored. Historical files open their
+local working-tree directory; a missing directory produces a warning.
+The PR screen provides conversation, reviews, metadata and CI operations. Its `D`
 action opens Diffview with that PR association preserved. Changing the range
 invalidates this explicit association and discovers relationships for the new
 comparison instead.
