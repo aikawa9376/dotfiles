@@ -20,6 +20,14 @@ return {
       backend = "image",
       image = { font = "Liga Plemol Console NF" },
     },
+    on = {
+      attach = function(ctx)
+        -- PR/Issue drafts and conversations keep the markdown filetype.
+        if vim.b[ctx.buf].git_pr_markdown then
+          require('inkstone.state').get(ctx.buf).typography.enabled = false
+        end
+      end,
+    },
     heading = {
       sign = false,
       position = "inline",
@@ -111,6 +119,7 @@ return {
         fzf = { code = code_padding },
         gitissue = {
           sign = { enabled = false },
+          typography = { enabled = false },
           heading = { sign = false },
           code = vim.tbl_extend('force', code_padding, { sign = false }),
         },

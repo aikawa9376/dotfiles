@@ -60,6 +60,8 @@ function M.buffer(prefix, comments, viewer, contexts)
     end
   end
   local buf = vim.api.nvim_create_buf(false, true)
+  -- Shared by conversation history and the read-only comment preview.
+  vim.b[buf].git_pr_markdown = true
   vim.bo[buf].bufhidden, vim.bo[buf].filetype, vim.bo[buf].swapfile = 'wipe', 'markdown', false
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable, vim.bo[buf].readonly, vim.bo[buf].modified = false, true, false

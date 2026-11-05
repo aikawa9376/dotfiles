@@ -14,6 +14,8 @@ function M.open(opts)
     opts.ctx.number or 'new', opts.title:gsub('[ /]', '-'))
   if comment and comment.id then target = target .. '/comment-' .. comment.id end
   names.assign(buf, names.uri(issue and 'git-issue-compose' or 'git-pr-compose', opts.ctx.root, target))
+  -- Set before FileType so optional renderers can apply Git-specific policy.
+  vim.b[buf].git_pr_markdown = true
   vim.bo[buf].filetype = 'markdown'
   vim.b[buf].git_pr_ctx = opts.ctx
   if issue then vim.b[buf].git_issue_ctx = opts.ctx end

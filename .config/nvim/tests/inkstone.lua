@@ -44,6 +44,11 @@ for _, ft in ipairs(spec.ft) do
   assert(#marks > 0, ft .. ': empty decorations')
   assert(not vim.inspect(marks):find('RenderMarkdown', 1, true), ft .. ': old highlight namespace')
   local config = state.get(buf)
+  if ft == 'gitpr' or ft == 'gitissue' then
+    assert(config.typography.enabled == false, ft .. ': typography enabled')
+  elseif ft == 'markdown' then
+    assert(config.typography.enabled == 'auto', 'Ordinary Markdown typography policy changed')
+  end
   if ft == 'blink-cmp-documentation' then
     assert(config.code.left_pad == 0 and config.code.right_pad == 0 and config.debounce == 0)
   else
@@ -54,6 +59,30 @@ for _, ft in ipairs(spec.ft) do
   assert(ui.cache[buf] == nil and state.cache[buf] == nil, ft .. ': stale cache')
   print('PASS: Inkstone configuration and adapter: ' .. ft)
 end
+-- Exercise real draft/history creation: the marker must exist before FileType
+-- attaches Inkstone, even though both buffers keep the markdown filetype.
+for _, kind in ipairs({ 'pr', 'issue' }) do
+  local draft = require('git.features.pr_composer').open({
+    ctx = { root = root, host = 'github.example.test', repo = 'test/repo', number = 7,
+      resource_kind = kind, url = 'https://github.example.test/test/repo/issues/7' },
+    title = 'Typography policy', body = '# Draft', prefix = {},
+    history = { { body = '# History', user = { login = 'author' } } },
+    submit = function() error('This test must not submit a draft') end,
+  })
+  local history = vim.b[draft].git_pr_context
+  for _, buf in ipairs({ draft, history }) do
+    assert(vim.bo[buf].filetype == 'markdown', 'Git comment filetype changed')
+    assert(state.cache[buf] and state.cache[buf].typography.enabled == false,
+      kind .. ': Git comment typography enabled at attachment')
+  end
+  vim.api.nvim_buf_delete(draft, { force = true })
+  assert(not vim.api.nvim_buf_is_valid(history), 'Git history did not close with draft')
+  print('PASS: typography disabled in Markdown drafts and histories: ' .. kind)
+end
+local ordinary = vim.api.nvim_create_buf(false, true)
+vim.bo[ordinary].filetype = 'markdown'
+assert(state.get(ordinary).typography.enabled == 'auto', 'Git policy leaked into ordinary Markdown')
+vim.api.nvim_buf_delete(ordinary, { force = true })
 -- Right-aligned language labels must stay visible even when a body line wraps.
 vim.cmd('vsplit')
 vim.api.nvim_win_set_width(0, 60)
