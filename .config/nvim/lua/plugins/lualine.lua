@@ -401,7 +401,7 @@ return {
             end,
             cond = conditions.hide_in_width,
           },
-          { require("lazyagent").status },
+          { require("lazyagent").statusline },
           { function() return vim.fn.ObsessionStatus("", "") end, cond = conditions.obsession },
         },
       },

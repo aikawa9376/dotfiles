@@ -24,6 +24,10 @@ end
 
 local function refresh_ui(agent_names)
   refresh_transcript_footers(agent_names)
+  local lualine = package.loaded.lualine
+  if lualine and type(lualine.refresh) == "function" then
+    lualine.refresh({ place = { "statusline" } })
+  end
 end
 
 local function active_task_ids()
@@ -46,7 +50,7 @@ local icons = {
 }
 local team_icon = ""
 
-local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local spinner = require("lazyagent.logic.status_spinner")
 
 local function grouped_active_sessions(active)
   local groups = {}
@@ -86,13 +90,18 @@ local function grouped_active_sessions(active)
   return ordered
 end
 
-function M.get_status()
+local function render_status(statusline)
   local active = agent_logic.get_active_agents()
   local tasks = active_task_ids()
-  if #active == 0 and #tasks == 0 then return "" end
-
   local status_parts = {}
-  local frame_idx = math.floor(vim.loop.now() / 50) % #spinner_frames + 1
+  local animated = false
+  local function loading_frame()
+    animated = true
+    return statusline and spinner.expression or spinner.get_frame()
+  end
+  local function literal(text)
+    return statusline and text:gsub("%%", "%%%%") or text
+  end
   for _, group in ipairs(grouped_active_sessions(active)) do
     local icon = group.icon
     if not group.is_team and group.count > 1 then
@@ -101,7 +110,7 @@ function M.get_status()
     if group.waiting then
       icon = icon .. " ?"
     elseif group.thinking then
-      icon = icon .. " " .. spinner_frames[frame_idx]
+      icon = icon .. " " .. loading_frame()
     end
     table.insert(status_parts, icon)
   end
@@ -109,13 +118,26 @@ function M.get_status()
   for _, id in ipairs(tasks) do
     local task = transient_tasks[id]
     if task then
-      local icon = task.icon or icons.Default
-      local label = task.label and (" " .. task.label) or ""
-      table.insert(status_parts, icon .. " " .. spinner_frames[frame_idx] .. label)
+      local icon = literal(task.icon or icons.Default)
+      local label = task.label and (" " .. literal(task.label)) or ""
+      table.insert(status_parts, icon .. " " .. loading_frame() .. label)
     end
   end
 
+  if statusline then
+    if animated then spinner.start() else spinner.stop() end
+  end
   return table.concat(status_parts, " ")
+end
+
+function M.get_status()
+  return render_status(false)
+end
+
+-- lualine keeps the expression in its cached string. Only the spinner is
+-- evaluated on animation ticks; grouping and other components stay cached.
+function M.get_statusline()
+  return render_status(true)
 end
 
 function M.start_task(label, opts)

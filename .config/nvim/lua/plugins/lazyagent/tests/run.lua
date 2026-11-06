@@ -122,6 +122,7 @@ local suites = {
   "tests.nvim_bridge_spec",
   "tests.session_lifecycle_spec",
   "tests.status_spec",
+  "tests.status_animation_spec",
 }
 
 local failures = {}

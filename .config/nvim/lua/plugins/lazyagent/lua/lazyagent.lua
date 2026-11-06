@@ -75,6 +75,7 @@ M.resession_post_load = session_logic.resession_post_load
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
+M.statusline = status_logic.get_statusline
 M.send_enter = send_logic.send_enter
 M.send_down = send_logic.send_down
 M.send_up = send_logic.send_up
