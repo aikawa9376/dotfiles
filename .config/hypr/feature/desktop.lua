@@ -43,7 +43,7 @@ hl.config({
     },
     input = {
         repeat_delay = 150,
-        repeat_rate = 230,
+        repeat_rate = 200,
         follow_mouse = 1,
     },
     dwindle = {
