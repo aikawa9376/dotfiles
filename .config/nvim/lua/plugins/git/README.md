@@ -2482,6 +2482,7 @@ file-background heatmap and Snacks toggle are unchanged.
 | `{count}P` | Reblame at the numbered parent of a merge |
 | `Ctrl-o` / `Ctrl-i` | Back/forward through paired blame and code views |
 | `gk` | Toggle full commit message near the code cursor; follows the cursor |
+| `gh` | Open file Git information: first add, last change, counts, contributors and recent history (both panes) |
 | `Ctrl-p` | Toggle a following commit diff preview |
 | `<CR>` / `i` / double click | Open the commit at its file/diff line in another tab; `q` or jumping back to blame with `Ctrl-o` returns to the preserved blame/code pair |
 | `o` / `O` | Open the commit in a split/tab, keeping blame |
@@ -2497,6 +2498,36 @@ file-background heatmap and Snacks toggle are unchanged.
 | `R` | Refresh working-tree blame |
 | `?` | Show available actions |
 | `q` | Close blame and restore the original code buffer/view |
+
+`gh` opens a focused, scrollable file information float. It summarizes the
+current frame's path/repository, line count, first recorded addition, latest
+change, commit/change/rename counts and contributors (using Git mailmap
+identities). The default list shows the latest 12 file commits and the top five
+contributors; `a` toggles the complete lists. Git follows detected renames, so
+the original path and rename events remain visible. Dates include the author's
+timezone and relative age. Colors follow the PR/CI and log panels: purple section
+headings, cyan labels/keys, green hashes/additions, red deletions, gold authors,
+blue dates and orange counts. Subjects stay bright while relative ages, email
+addresses and explanatory text are muted. The `GitBlameFile*` highlight groups
+are customized in `config/colorScheme.lua`, with theme-linked fallbacks for
+standalone use and colorscheme changes. Counts include additions and renames; “Changes after
+add” excludes addition records. They describe reachable `git log --follow`
+history, including its merge simplification, rather than every branch. Shallow
+repositories explicitly mark history as incomplete and show “Earliest available”
+instead of claiming a known initial addition.
+
+Working-tree frames additionally show staged/unstaged line changes and whether
+the source buffer has unsaved changes; unsaved contents are not counted in disk
+diff totals. Historical frames query only the viewed revision and its ancestors.
+On a summary or log commit row, `<CR>` opens that commit in a new tab with its
+historical file expanded, and `q` in the commit returns to the preserved blame
+pair. `y` copies its full hash to the unnamed register. `R` reloads information;
+`q`, `<Esc>` or `gh` closes the float. Reads are asynchronous and canceled on
+refresh/close. Leaving the float, changing blame frames or closing the session
+also releases it; late results cannot repaint it. The float resizes with the
+editor and keeps normal scrolling/search available. This overview takes cues
+from [VS Code Timeline](https://code.visualstudio.com/docs/sourcecontrol/history)
+and [GitLens file history](https://help.gitkraken.com/gitlens/gl-visual-file-history/).
 
 When viewing a historical revision, the session-owned top-right info float initially shows
 the viewed revision’s hash, tree, parents, author/committer dates and message;
@@ -2525,7 +2556,7 @@ Uncommitted lines do not query GitHub. Both floats adjust to
 resizing/scrolling. `tests/blame_pr_preview.lua` verifies deferred sizing and
 cursor/lifetime isolation with real local Git and controlled GitHub responses.
 
-`C`, `gf`, `gk`, `Ctrl-p`, and paired history keys also work in the code pane. Existing
+`C`, `gf`, `gh`, `gk`, `Ctrl-p`, and paired history keys also work in the code pane. Existing
 buffer-local mappings are restored when the session ends. Initial working-tree
 blame includes unsaved buffer contents and refreshes after edits/writes. Untracked
 files or files without a committed version are rejected with a notification
@@ -2554,3 +2585,5 @@ no loading split; `tests/blame_model.lua`, `tests/blame_view.lua`, and
 line mapping, merge parents, root boundaries, real Ctrl-o/Ctrl-i mappings,
 following floats, date modes, live edits, source blobs, commit/diff entry points,
 heatmaps, cleanup and pending-result rejection.
+`tests/blame_file_info.lua` covers real file history, rename/literal-path handling,
+contributors, local changes, historical/shallow scopes and float ownership.

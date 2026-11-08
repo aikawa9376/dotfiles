@@ -253,6 +253,9 @@ local function close_float(s)
   s.float_win = nil
   if valid(win) then vim.api.nvim_win_close(win, true) end
 end
+local function close_file_info(s)
+  if s.file_info then s.file_info.close(); s.file_info = nil end
+end
 local function adjacent_same_commit_block(f, commit, row, direction, count)
   if direction > 0 then
     for first = row + 1, #f.rows do
@@ -666,6 +669,7 @@ local function paint(s, f)
 end
 local show_frame, bind, cleanup
 show_frame = function(s, f)
+  close_file_info(s)
   s.switching = true
   for _, win in ipairs({ s.win, s.code_win }) do local_options(win, { scrollbind = false, cursorbind = false }) end
   if not f.code_buf or not vim.api.nvim_buf_is_valid(f.code_buf) then
@@ -845,6 +849,7 @@ cleanup = function(s)
   if s.dimmed_buf then diffdim.clear_blame(s.dimmed_buf); s.dimmed_buf = nil end
   sessions[s.buf] = nil
   if s.job then s.job:kill(15) end
+  close_file_info(s)
   close_float(s)
   if valid(s.info_win) then vim.api.nvim_win_close(s.info_win, true) end
   pcall(vim.api.nvim_del_augroup_by_id, s.group)
@@ -920,6 +925,15 @@ bind = function(s, b, code)
     tell(s.uniform_commit_style and 'Uniform blame highlighting enabled' or 'Selected commit highlighting enabled')
   end
   map('gf', toggle_uniform)
+  map('gh', function()
+    if s.file_info then close_file_info(s); return end
+    local f = s.history[s.index]
+    if not f then return end
+    s.file_info = require('git.features.blame_file_info').open({
+      root = s.root, path = f.path, revision = f.revision, frame = f, return_win = s.win,
+      on_close = function() s.file_info = nil end,
+    })
+  end)
   map('C', function()
     local r, f = current(s)
     if not f then return end
@@ -975,6 +989,7 @@ bind = function(s, b, code)
     '{count}P     blame a numbered parent',
     '<C-o> / <C-i>  back / forward (code and blame together)',
     'gk           toggle following commit message',
+    'gh           file information: creation, changes, contributors, history',
     '<C-p>        toggle following diff preview',
     '<CR> / i     inspect commit in a tab (q returns)',
     'o / O        open commit in split / tab',
