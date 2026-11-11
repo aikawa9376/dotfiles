@@ -1,0 +1,106 @@
+--- a/src/nvim/decoration.c
++++ b/src/nvim/decoration.c
+@@ -1285,51 +1285,66 @@
+ 
+   assert(start_row >= 0);
+ 
++  // Conceal providers and fold expressions may change the marktree. Snapshot
++  // keys before invoking them; neither an iterator nor decoration pointers may
++  // survive a callback which can split, merge, or free their nodes.
++  kvec_withinit_t(MTKey, 8) marks;
++  kvi_init(marks);
++  do {
++    kvi_push(marks, marktree_itr_current(itr));
++  } while (marktree_itr_next_filter(buf->b_marktree, itr, end_row, 0, lines_filter));
++
+   int n_virt_lines = 0;
+-  while (true) {
+-    MTKey mark = marktree_itr_current(itr);
++  for (size_t m = 0; m < kv_size(marks); m++) {
++    MTKey mark = kv_A(marks, m);
++    if (mt_invalid(mark) || !ns_in_win(mark.ns, wp)) {
++      continue;
++    }
++    if (apply_folds) {
++      if (hasFolding(wp, mark.pos.row + 1, NULL, NULL)
++          || decor_conceal_line(wp, mark.pos.row, false)) {
++        continue;
++      }
++      // The provider may have removed or replaced this mark's decoration.
++      mark = marktree_lookup(buf->b_marktree, mt_lookup_key(mark), NULL);
++      if (mt_invalid(mark) || !ns_in_win(mark.ns, wp)) {
++        continue;
++      }
++    }
+     DecorVirtText *vt = mt_decor_virt(mark);
+-    if (!mt_invalid(mark) && ns_in_win(mark.ns, wp)) {
+-      while (vt) {
+-        VirtLines virt_lines = vt->data.virt_lines;
+-        if ((vt->flags & kVTIsLines) && kv_size(virt_lines) > 0) {
+-          bool above = vt->flags & kVTLinesAbove;
+-          int mrow = mark.pos.row;
+-          int draw_row = mrow + (above ? 0 : 1);
+-          if (draw_row >= start_row && draw_row < end_row
+-              && (!apply_folds || !(hasFolding(wp, mrow + 1, NULL, NULL)
+-                                    || decor_conceal_line(wp, mrow, false)))) {
+-            // All virtual lines from the same extmark have the same overflow flag.
+-            if (decor_virt_line_wrap(wp, kv_A(virt_lines, 0).overflow)) {
+-              // Iterates over each virtual line summing number of rows.
+-              // Rows belonging to previous line are accumulated in num_below.
+-              for (int i = 0; i < (int)kv_size(virt_lines); i++) {
+-                int rows = decor_virt_line_rows(wp, &kv_A(virt_lines, i), 0, NULL);
+-                n_virt_lines += rows;
+-                if (num_below && !above) {
+-                  (*num_below) += rows;
+-                }
+-              }
+-            } else {
+-              // If virtual lines don't wrap there is no need to iterate over them.
+-              n_virt_lines += (int)kv_size(virt_lines);
++    while (vt) {
++      VirtLines virt_lines = vt->data.virt_lines;
++      if ((vt->flags & kVTIsLines) && kv_size(virt_lines) > 0) {
++        bool above = vt->flags & kVTLinesAbove;
++        int draw_row = mark.pos.row + (above ? 0 : 1);
++        if (draw_row >= start_row && draw_row < end_row) {
++          // All virtual lines from the same extmark have the same overflow flag.
++          if (decor_virt_line_wrap(wp, kv_A(virt_lines, 0).overflow)) {
++            // Iterates over each virtual line summing number of rows.
++            // Rows belonging to previous line are accumulated in num_below.
++            for (int i = 0; i < (int)kv_size(virt_lines); i++) {
++              int rows = decor_virt_line_rows(wp, &kv_A(virt_lines, i), 0, NULL);
++              n_virt_lines += rows;
+               if (num_below && !above) {
+-                (*num_below) += (int)kv_size(virt_lines);
++                (*num_below) += rows;
+               }
+             }
+-            if (lines) {
+-              kv_splice(*lines, virt_lines);
++          } else {
++            // If virtual lines don't wrap there is no need to iterate over them.
++            n_virt_lines += (int)kv_size(virt_lines);
++            if (num_below && !above) {
++              (*num_below) += (int)kv_size(virt_lines);
+             }
+           }
++          if (lines) {
++            kv_splice(*lines, virt_lines);
++          }
+         }
+-        vt = vt->next;
+-      }
+-    }
+-
+-    if (!marktree_itr_next_filter(buf->b_marktree, itr, end_row, 0, lines_filter)) {
+-      break;
+-    }
+-  }
++      }
++      vt = vt->next;
++    }
++  }
++  kvi_destroy(marks);
+ 
+   return n_virt_lines;
+ }
