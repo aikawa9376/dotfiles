@@ -1262,8 +1262,14 @@ fail to metadata and web navigation instead of substituting another job.
 `:GitPrCreate` is the same **Create default PR** route as `N C`: prefill the
 title with the latest commit subject and let you edit only that field, publish the current branch with
 a regular, non-force push to its configured push remote, then run
-`gh pr create --head ... --fill --title ...`. The body comes from commits;
-base branch and remaining options use GitHub CLI defaults. It creates a ready
+`gh pr create --head ... --title ...`. The body uses the repository's published
+PR template, read from GitHub rather than the local feature branch. A single
+template is applied automatically; multiple templates open a filename picker,
+and canceling it stops before push or PR creation. Template text is passed
+unchanged through stdin (`--body-file -`), including comments and checklists.
+If no template exists, `--fill` retains the commit-derived body. A failed template
+lookup stops with a notice rather than publishing without it. Base branch and
+remaining options use GitHub CLI defaults. It creates a ready
 PR, uses the fork owner in `--head` when needed, and opens the resulting PR status.
 Detached HEAD, push failures and unavailable GitHub defaults fail with a notice.
 

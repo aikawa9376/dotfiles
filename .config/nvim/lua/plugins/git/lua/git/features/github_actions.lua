@@ -70,6 +70,45 @@ function M.create_quick(opts)
   opts = vim.deepcopy(opts or M.context())
   local title_root = opts.root or utils.get_buf_work_tree(opts.bufnr or vim.api.nvim_get_current_buf()) or utils.get_work_tree({})
   if not title_root then notify('Not in a Git repository'); return end
+  local function publish(ctx, title, body, source)
+    M.run(ctx, function(target)
+      local branch = async.git(target.root, { 'symbolic-ref', '--quiet', '--short', 'HEAD' })
+      local hash = async.git(target.root, { 'rev-parse', 'HEAD' })
+      assert(branch and hash and vim.trim(branch) == source.branch and vim.trim(hash) == source.hash,
+        'Branch or HEAD changed while choosing a PR template; create the PR again')
+      -- Publish using the configured push destination without force. Supplying
+      -- --head then keeps gh out of its terminal-only push/fork prompts.
+      local remote
+      for _, key in ipairs({ 'branch.' .. source.branch .. '.pushRemote', 'remote.pushDefault', 'branch.' .. source.branch .. '.remote' }) do
+        local value = async.git(target.root, { 'config', '--get', key })
+        if value and vim.trim(value) ~= '' and vim.trim(value) ~= '.' then remote = vim.trim(value); break end
+      end
+      if not remote then remote = 'origin' end
+      local url, remote_err = async.git(target.root, { 'remote', 'get-url', '--push', remote })
+      if not url then error(remote_err, 0) end
+      local host, repo = vim.trim(url):match('^https?://([^/]+)/(.+)$')
+      if not host then host, repo = vim.trim(url):match('^ssh://[^@]+@([^/]+)/(.+)$') end
+      if not host then host, repo = vim.trim(url):match('^[^@]+@([^:]+):(.+)$') end
+      local head = source.branch
+      if host and repo then
+        repo = repo:gsub('%.git$', '')
+        if host ~= target.host then error('Push remote uses another host; configure a GitHub push remote first', 0) end
+        if repo ~= target.repo then head = repo:match('^([^/]+)/') .. ':' .. source.branch end
+      end
+      local _, push_err = async.git(target.root, { 'push', '--', remote, 'HEAD:refs/heads/' .. source.branch })
+      if push_err then error(push_err, 0) end
+      local args = { 'pr', 'create', '--repo', github.repo_arg(target), '--head', head, '--title', title }
+      local command_opts
+      if body ~= nil then
+        vim.list_extend(args, { '--body-file', '-' })
+        command_opts = { stdin = body }
+      else args[#args + 1] = '--fill' end
+      return github.command(target, args, command_opts)
+    end, function(url, target)
+      target.url = vim.trim(url)
+      require('git.features.pr').open(target)
+    end, true)
+  end
   local function input_title(default_title)
     vim.ui.input({ prompt = 'Default PR title: ', default = default_title }, function(title)
       if not title then return end
@@ -78,33 +117,12 @@ function M.create_quick(opts)
       M.run(vim.tbl_extend('force', opts, { root = title_root }), function(ctx)
         local branch, branch_err = async.git(ctx.root, { 'symbolic-ref', '--quiet', '--short', 'HEAD' })
         if not branch then error(branch_err or 'Checkout a branch before creating a PR', 0) end
-        branch = vim.trim(branch)
-        -- Publish using the configured push destination without force. Supplying
-        -- --head then keeps gh out of its terminal-only push/fork prompts.
-        local remote
-        for _, key in ipairs({ 'branch.' .. branch .. '.pushRemote', 'remote.pushDefault', 'branch.' .. branch .. '.remote' }) do
-          local value = async.git(ctx.root, { 'config', '--get', key })
-          if value and vim.trim(value) ~= '' and vim.trim(value) ~= '.' then remote = vim.trim(value); break end
-        end
-        if not remote then remote = 'origin' end
-        local url, remote_err = async.git(ctx.root, { 'remote', 'get-url', '--push', remote })
-        if not url then error(remote_err, 0) end
-        local host, repo = vim.trim(url):match('^https?://([^/]+)/(.+)$')
-        if not host then host, repo = vim.trim(url):match('^ssh://[^@]+@([^/]+)/(.+)$') end
-        if not host then host, repo = vim.trim(url):match('^[^@]+@([^:]+):(.+)$') end
-        local head = branch
-        if host and repo then
-          repo = repo:gsub('%.git$', '')
-          if host ~= ctx.host then error('Push remote uses another host; configure a GitHub push remote first', 0) end
-          if repo ~= ctx.repo then head = repo:match('^([^/]+)/') .. ':' .. branch end
-        end
-        local _, push_err = async.git(ctx.root, { 'push', '--', remote, 'HEAD:refs/heads/' .. branch })
-        if push_err then error(push_err, 0) end
-        return github.command(ctx, { 'pr', 'create', '--repo', github.repo_arg(ctx), '--head', head, '--fill', '--title', title })
-      end, function(url, ctx)
-        ctx.url = vim.trim(url)
-        require('git.features.pr').open(ctx)
-      end, true)
+        local hash, hash_err = async.git(ctx.root, { 'rev-parse', 'HEAD' })
+        if not hash then error(hash_err, 0) end
+        return { branch = vim.trim(branch), hash = vim.trim(hash), templates = require('git.features.pr_templates').load(ctx) }
+      end, function(source, ctx)
+        require('git.features.pr_templates').choose(source.templates, function(body) publish(ctx, title, body, source) end)
+      end)
     end)
   end
   local task, err = async.run(title_root, function()

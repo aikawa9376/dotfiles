@@ -133,7 +133,9 @@ function M.new()
         end
         data = { comments }
       elseif path == 'graphql' then
-        if payload.query:find('timelineTypes:', 1, true) then
+        if payload.query:find('pullRequestTemplates', 1, true) then
+          data = { data = { repository = { pullRequestTemplates = vim.deepcopy(f.pull_request_templates or {}) } } }
+        elseif payload.query:find('timelineTypes:', 1, true) then
           local fixture = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
           local schema = f.timeline_schema or vim.json.decode(table.concat(vim.fn.readfile(fixture .. '/fixtures/pr_timeline_schema.json'), '\n'))
           local possible = {}
