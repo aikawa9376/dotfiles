@@ -58,11 +58,15 @@ ui.key('<CR>', commit_row)
 local commit_buf = vim.api.nvim_get_current_buf()
 assert(vim.b[commit_buf].git_commit == head and vim.bo[commit_buf].filetype == 'gitcommitview')
 vim.api.nvim_buf_delete(commit_buf, { force = true }); ui.source()
-for _, key in ipairs({ '=', '<Tab>', 'o', '<CR>' }) do
+for _, key in ipairs({ '=', '<Tab>', 'o' }) do
   ui.key(key, ui.row('Commits (2)')); collapsed(); marker('▸')
   assert(ui.row('Edited PR title') and ui.row('Added body line') and vim.bo[ui.buf].modified)
   ui.key('>', ui.row('Commits (2)')); marker('▾')
 end
+ui.key('<CR>', ui.row('Commits (2)')); marker('▾')
+ui.key('<', ui.row('Commits (2)')); collapsed(); marker('▸')
+ui.key('<CR>', ui.row('Commits (2)')); collapsed(); marker('▸')
+ui.key('>', ui.row('Commits (2)'))
 assert(#f.calls == calls and log_reads == 1, 'Opening/folding history repeated remote or Git log work')
 -- Commit rows are read-only and cannot be submitted as PR metadata.
 commit_row = ui.row(head:sub(1, 7) .. '\t')

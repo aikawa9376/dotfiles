@@ -37,6 +37,12 @@ vim.api.nvim_buf_set_lines(ui.buf, title - 1, title, false, { 'Unsaved Conversat
 vim.api.nvim_buf_set_lines(ui.buf, title + 1, title + 1, false, { 'Body grew during review' })
 local requests = #f.calls
 ui.key('<CR>', ui.row('Conversation ('))
+local heading_input = vim.api.nvim_get_current_buf()
+assert(vim.bo[heading_input].buftype == 'acwrite' and vim.b[heading_input].git_pr_history,
+  'Enter on the Conversation heading should open history/comment input')
+ui.close_draft(heading_input); ui.source()
+absent('PR-wide question')
+ui.key('<Tab>', ui.row('Conversation ('))
 assert(ui.row('PR-wide question') and ui.row('Additional context') and ui.row('Looks good overall') and ui.row('My overall reply'))
 assert(item_row('comment:1') < item_row('review:1') and item_row('review:1') < item_row('comment:2'))
 assert(ui.row('Review CHANGES_REQUESTED') and not pcall(ui.row, 'Review COMMENTED'))
@@ -101,6 +107,6 @@ local fake = ui.row('M file name.txt')
 assert(view.conversation_at(ui.buf, fake).key == 'comment:7' and view.entry_at(ui.buf, fake) == nil)
 requests = #f.calls
 ui.key('o', fake); assert(not pcall(ui.row, 'Changes (99)') and #f.calls == requests)
-ui.key('<CR>', ui.row('Conversation (')); assert(ui.row('Changes (99)'))
+ui.key('<Tab>', ui.row('Conversation (')); assert(ui.row('Changes (99)'))
 vim.api.nvim_buf_delete(ui.buf, { force = true }); f.cleanup()
 print('PASS: default-closed chronological PR conversation, paginated comments/public summaries, no inline duplication, semantic rows, history/post/menu/browser routes, folds/drafts and partial-read failures')

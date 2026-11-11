@@ -641,10 +641,10 @@ unchanged comparisons reuse the already loaded history.
 | `]u` / `[u` | Next/previous unviewed file; counts supported |
 | `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
 | `D` | Entire PR in Diffview |
-| `<CR>` | Toggle the CI/Commits/Changes heading; open CI details, commit details, a marked thread, or the PR head file |
+| `<CR>` | Open CI details/checks, commit details, a marked thread, or the PR head file; section folds stay unchanged |
 | `gk` | Preview conversation near cursor; repeat to focus the popup |
 | `gc` | Read/reply to threads on the selected file or marked diff line |
-| `gc` / Enter inside Conversation | Read PR-wide history and write a PR comment; Enter on its heading toggles the section |
+| `gc` / Enter inside Conversation | Read PR-wide history and write a PR comment, including from its heading |
 | `gC` | New PR conversation comment, immediate diff comment, or pending review comment |
 | `gcn` / `gcr` / `gcp` | Open a contextual comment / review draft / PR conversation input directly |
 | Visual `gC` | Comment on a continuous range of diff lines on one side |
@@ -657,7 +657,7 @@ unchanged comparisons reuse the already loaded history.
 | `gf` / `gq` | Worktree file / changed files in quickfix |
 | `gD` | Shared word-diff display settings |
 | `gx` / `gy` | Browser at cursor / copy PR URL |
-| `R` | Collapse all file diffs and refresh PR status |
+| `R` | Collapse all file diffs and reload PR status from GitHub (on read-only rows, or from the PR action menu) |
 | `?` / `q` | Key guide / close |
 
 Native two-pane diffs opened by PR status's `d` / `dv` / `dh` / `ds` retain
@@ -865,14 +865,15 @@ repository name opens the repository; elsewhere on that line it opens the PR.
 The CI/review summary and its check list finish the expanded Repo details,
 after your pending/last review rows. CI results start collapsed and have their own
 gutter marker. On the CI summary or a result row, `o` / `=` / `<Tab>` toggles
-the results and `>` / `<` expands/collapses them; Enter on the summary also
-toggles them. Results align at column zero without nesting indentation.
+the results and `>` / `<` expands/collapses them. Enter on the summary opens
+the PR checks page. Results align at column zero without nesting indentation.
 Collapsing Repo hides this CI block too, retaining its expansion state.
 CI folding preserves drafts/file diffs, performs no requests, and survives refreshes.
 
 Changes starts expanded and folds independently of Repo, Commits and each
-file's diff. Its heading uses the same gutter marker and `o` / `=` / `<Tab>` /
-`<CR>` controls; `>` / `<` opens/closes that section. Section folding retains
+file's diff. Its heading uses the same gutter marker and `o` / `=` / `<Tab>`
+controls; `>` / `<` opens/closes that section. Enter opens targets and does not
+toggle section folds, matching the Status panel. Section folding retains
 individual file choices, draft edits and the review-thread footer, and performs
 no Git/GitHub requests. Refresh preserves the section state. `i`, file/hunk
 navigation and `]t` / `[t` reveal a closed Changes section before moving.

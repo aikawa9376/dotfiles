@@ -66,7 +66,13 @@ end
 ui.key('=', ui.row('test:')); absent('test:'); assert(ui.row('Created by:')); ci_gutter('▸')
 ui.key('>', ui.row('CI:')); assert(ui.row('test:'))
 ui.key('<', ui.row('external:')); absent('external:'); assert(ui.row('CI:'))
+local checks_url, open_checks = nil, vim.ui.open
+vim.ui.open = function(url) checks_url = url end
+ui.key('<CR>', ui.row('CI:')); absent('test:'); ci_gutter('▸')
+assert(checks_url == f.pr.url .. '/checks', 'Enter should open checks without toggling CI')
+ui.key('<Tab>', ui.row('CI:')); assert(ui.row('test:')); ci_gutter('▾')
 ui.key('<CR>', ui.row('CI:')); assert(ui.row('test:')); ci_gutter('▾')
+vim.ui.open = open_checks
 assert(#f.calls == calls_before_fold, 'CI folding performed network or Git work')
 local stats_row = ui.row('Commits:')
 local stats = vim.api.nvim_buf_get_extmarks(ui.buf, vim.api.nvim_create_namespace('git_pr_status'),

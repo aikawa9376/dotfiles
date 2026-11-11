@@ -33,14 +33,16 @@ vim.api.nvim_buf_set_lines(ui.buf, title - 1, title, false, { 'Unsaved title' })
 vim.api.nvim_buf_set_lines(ui.buf, title + 1, title + 1, false, { 'Unsaved paragraph' })
 ui.key('o', ui.row('Commits ('))
 local calls = #f.calls
-for _, key in ipairs({ 'o', '=', '<Tab>', '<CR>' }) do
+for _, key in ipairs({ 'o', '=', '<Tab>' }) do
   ui.source(); vim.api.nvim_win_set_cursor(0, { ui.row('Changes ('), 0 }); press(key)
   hidden()
   assert(ui.row('Unsaved title') and ui.row('Unsaved paragraph') and vim.bo[ui.buf].modified)
   assert(ui.row(f.head:sub(1, 7) .. '\t'), 'Changes fold collapsed Commits')
   press(key); shown()
 end
+ui.key('<CR>', ui.row('Changes (')); shown()
 ui.key('<', ui.row('Changes (')); hidden()
+ui.key('<CR>', ui.row('Changes (')); hidden()
 ui.key('>', ui.row('Changes (')); shown()
 assert(#f.calls == calls, 'Changes folding performed remote requests')
 for _, entry in ipairs(view.model(ui.buf).entries) do if entry.path ~= 'file name.txt' then
@@ -73,7 +75,8 @@ old = view.model(ui.buf); view.refresh(ui.buf, false, true)
 ui.wait(function() return view.model(ui.buf) ~= old end)
 assert(ui.row('Changes (0)') and #view.model(ui.buf).entries == 0); marker('▸')
 ui.key('>', ui.row('Changes (')); marker('▾')
-ui.key('<CR>', ui.row('Changes (')); marker('▸')
+ui.key('<CR>', ui.row('Changes (')); marker('▾')
+ui.key('<Tab>', ui.row('Changes (')); marker('▸')
 assert(ui.row('Unsaved title') and ui.row('Unsaved paragraph') and vim.bo[ui.buf].modified)
 vim.api.nvim_buf_delete(ui.buf, { force = true }); f.cleanup()
-print('PASS: default-open Changes folding, real aliases/Enter, preserved file/history/header state and drafts, no eager patches, refresh persistence, i/comment navigation and empty changes')
+print('PASS: Changes fold aliases, Enter preserves folds, draft/file state, refresh persistence, navigation and empty changes')

@@ -16,6 +16,7 @@ local headings = {
   ['GitHub / panel'] = true, ['Visual selections'] = true,
 }
 local column, entries, seen = nil, 0, {}
+local enter_label
 for _, line in ipairs(lines) do
   local keys, label = line:match('^(.-)%s%s+(.+)$')
   if keys then
@@ -26,10 +27,13 @@ for _, line in ipairs(lines) do
       assert(vim.fn.strdisplaywidth(line) <= vim.api.nvim_win_get_width(win), 'PR help action wraps at 60 columns')
       assert(not label:find(';', 1, true), 'PR help combines distinct actions on one row')
       column, entries, seen[keys] = at, entries + 1, true
+      if keys == '<CR>' then enter_label = label end
     end
   end
 end
 assert(entries >= 20 and seen['gc'] and seen['O'] and seen['i'] and seen[':w'] and seen['<C-s>'], 'PR key guide lost actions')
+assert(enter_label and not enter_label:find('Toggle', 1, true) and seen.R,
+  'PR key guide must separate opening targets, folding sections and explicit refresh')
 for _, key in ipairs({ 'gu', 'gp', 'gh', 'gU', 'gco' }) do assert(seen[key], 'PR key guide lost section navigation: ' .. key) end
 for _, key in ipairs({ 'gF', ']u / [u', ']t / [t' }) do assert(seen[key], 'PR key guide lost review navigation: ' .. key) end
 local colored = {}

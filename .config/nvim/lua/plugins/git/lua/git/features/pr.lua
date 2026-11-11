@@ -819,7 +819,7 @@ local function show_help()
       { 'd / dd / dv', 'Vertical file diff' },
       { 'dh / ds', 'Horizontal file diff' },
       { 'D', 'Entire PR in Diffview' },
-      { '<CR>', 'Toggle section / open target or CI details' },
+      { '<CR>', 'Open target or CI details' },
       { 'gf', 'Open worktree file' },
       { 'gq', 'Changed files in quickfix' },
       { 'gD', 'Diff display settings' },
@@ -1080,13 +1080,11 @@ local function attach(s)
     end, 'Open selected CI check details', true)
   end
   map('<CR>', function()
-    if vim.fn.line('.') - delta(s) == s.conversation_section.first then toggle(s, 'toggle'); return end
     if conversation_selected(s) then
       local item = M.conversation_at(b, vim.fn.line('.'))
       if require('git.features.pr_timeline').is_event(item) then vim.ui.open(item.url) else comments(s) end
       return
     end
-    if s.ci_section and vim.fn.line('.') == s.ci_section.first then toggle(s, 'toggle'); return end
     local check = M.check_at(b, vim.fn.line('.'))
     if check and (ci_detail_key == nil or ci_detail_key == '<CR>') then require('git.features.ci.view').open(s.ctx, check); return end
     local link = link_at(s)
@@ -1096,12 +1094,10 @@ local function attach(s)
       require('git.features.commit').open({ work_tree = s.model.root, revision = commit.hash, split = true })
       return
     end
-    if vim.fn.line('.') - delta(s) == s.commit_section.first then toggle(s, 'toggle'); return end
-    if vim.fn.line('.') - delta(s) == s.changes_section.first then toggle(s, 'toggle'); return end
     local entry, info = M.entry_at(b, vim.fn.line('.'))
     if info and #info.threads > 0 then comments(s)
     elseif entry then blob(s, entry, false, info.coordinate) end
-  end, 'Toggle PR section / open link, commit, thread or head file', true)
+  end, 'Open PR link, commit, thread or head file', true)
   map('gf', function()
     local entry = M.entry_at(b, vim.fn.line('.'))
     if entry then

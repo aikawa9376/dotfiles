@@ -98,7 +98,8 @@ key('gx', row('CI:'))
 assert(opened[#opened] == f.pr.url .. '/checks')
 local open_count = #opened
 key('<CR>', row('CI:')); key('<CR>', row('CI:'))
-assert(#opened == open_count and not pcall(row, 'test:') and row('Created by:'), 'Empty CI toggle opened a browser or folded Repo')
+assert(#opened == open_count + 2 and opened[#opened] == f.pr.url .. '/checks'
+  and not pcall(row, 'test:') and row('Created by:'), 'Enter did not open checks while retaining section folds')
 vim.api.nvim_buf_delete(b, { force = true })
 f.cleanup()
 print('PASS: PR metadata edit/save, protected diffs, lazy expansion, comment icons/replies, failure drafts, contextual gx, split diff and Diffview')
