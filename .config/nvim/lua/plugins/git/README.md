@@ -229,6 +229,9 @@ commit sections start open. Other sections start closed at three or more items.
 The `Head` header also starts open; fold it to show only the `Head` row.
 The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
+Switching the PR section from all PRs to the current branch with Enter or `gS`
+only takes effect when that branch has an open PR. Otherwise a notification is
+shown and the current list, fold and cursor stay unchanged.
 `gm` jumps to Unmerged paths. `gp` jumps to whichever commit section is shown:
 `Unpushed [only]` or `Commits [latest 15+]`.
 Opening Status starts a background `git fetch` for the configured default remote;

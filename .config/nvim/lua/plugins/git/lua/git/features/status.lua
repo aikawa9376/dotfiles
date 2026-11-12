@@ -1392,6 +1392,16 @@ function M.setup(group)
           scope_state_by_buf[b] = scope_state
           local previous_count = scope_state.branch_pr_count
           local count = #branch_prs
+          if count == 0 and scope_state.pr_manual and pr_state.manual_scope == 'branch'
+            and pull_request_scope_by_buf[b] == 'all' then
+            -- A PR may disappear after the scope action's cached-count check.
+            -- Keep the displayed list and fold until a nonempty branch result exists.
+            scope_state.branch_pr_count = 0
+            pr_state.manual_scope = 'all'
+            vim.notify('No open pull requests for the current branch', vim.log.levels.INFO)
+            finish_fetch()
+            return
+          end
           local increased = previous_count ~= nil and count > previous_count
           if previous_count == nil or increased or (previous_count > 0 and count == 0) then
             scope_state.pr_manual = false
@@ -1557,10 +1567,13 @@ function M.setup(group)
       local function set_pull_request_scope(scope)
         if scope == pull_request_scope_by_buf[b] then return end
         scope_state_by_buf[b] = scope_state_by_buf[b] or {}
+        if scope == 'branch' and scope_state_by_buf[b].branch_pr_count == 0 then
+          vim.notify('No open pull requests for the current branch', vim.log.levels.INFO)
+          return
+        end
         scope_state_by_buf[b].pr_manual = true
         pr_state.manual_scope = scope
         pr_state.generation = pr_state.generation + 1
-        status_folds.set(b, 'pull_requests', scope == 'all', { rebuild = false })
         fetch_pull_requests()
       end
 

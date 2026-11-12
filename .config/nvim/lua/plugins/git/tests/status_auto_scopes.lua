@@ -95,15 +95,43 @@ assert(not colored('git_status_pull_requests', pr_row, 'Other branch 日本語 @
 local function author_highlight()
   local commit_row
   for at, line in ipairs(lines()) do
-    if line:match(' Test Author 日本語$') then commit_row = at; break end
+    if line:match('^%x%x%x%x%x%x%x+%s') and line:match(' Test Author 日本語$') then commit_row = at; break end
   end
   assert(commit_row, 'Commit author must follow the subject at the end')
   assert(colored('git_status_icons', commit_row, 'Test Author 日本語', 'Type'), 'Commit author lost its color')
 end
 author_highlight()
 
+-- An empty branch scope must not remove the all-PR heading, change its fold,
+-- move the cursor, or issue another read. The explicit scope picker shares it.
+assert(vim.wait(5000, function() return not require('git.features.loading').busy(b) end, 10))
+local notify, select = vim.notify, vim.ui.select
+local notices = {}
+vim.notify = function(message, level) notices[#notices + 1] = { message = message, level = level } end
+local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end
+local function no_branch_notice(count)
+  assert(#notices == count and notices[count].message == 'No open pull requests for the current branch'
+    and notices[count].level == vim.log.levels.INFO, vim.inspect(notices))
+end
+local header = row('Pull requests (1) [all]')
+vim.api.nvim_win_set_cursor(0, { header, 0 })
+local before, reads, cursor = lines(), pr_reads, vim.api.nvim_win_get_cursor(0)
+press('<CR>'); no_branch_notice(1)
+assert(vim.deep_equal(lines(), before) and pr_reads == reads and vim.fn.foldclosed(header) == header
+  and vim.deep_equal(vim.api.nvim_win_get_cursor(0), cursor), 'Empty branch scope changed the displayed all list')
+press('<Tab>')
+before = lines()
+vim.ui.select = function(choices, opts, callback)
+  assert(opts.prompt == 'Pull request scope:'); callback(choices[1])
+end
+press('gS'); no_branch_notice(2)
+assert(vim.deep_equal(lines(), before) and pr_reads == reads and vim.fn.foldclosed(header) == -1,
+  'Scope picker hid or collapsed all PRs without a branch PR')
+vim.ui.select = select
+press('<Tab>')
+
 all_prs = {}
-local reads = pr_reads
+reads = pr_reads
 vim.fn.maparg('R', 'n', false, true).callback()
 assert(vim.wait(5000, function() return pr_reads >= reads + 2 and not row('Pull requests (') end, 20),
   'empty PR section was not hidden')
@@ -121,7 +149,48 @@ assert(#transient == 0, 'temporary empty PR heading appeared')
 author_highlight()
 assert(not row('@nil') and not row('@vim.NIL'), 'Missing PR author leaked a placeholder')
 
+-- A valid branch PR can disappear between painting the all list and pressing
+-- Enter. Do not publish that empty result or change the user's open all fold.
+all_prs = vim.deepcopy(branch_prs)
+vim.api.nvim_win_set_cursor(0, { row('Pull requests (1) [branch: main]'), 0 })
+press('<CR>')
+assert(vim.wait(5000, function()
+  return row('Pull requests (1) [all]') and not require('git.features.loading').busy(b)
+end, 10))
+vim.api.nvim_win_set_cursor(0, { row('Pull requests (1) [all]'), 0 })
+press('<CR>')
+assert(vim.wait(5000, function()
+  return row('Pull requests (1) [branch: main]') and not require('git.features.loading').busy(b)
+end, 10))
+assert(vim.fn.foldclosed(row('Pull requests (1) [branch: main]')) == -1, 'A valid branch scope should still open')
+press('<CR>')
+assert(vim.wait(5000, function()
+  return row('Pull requests (1) [all]') and not require('git.features.loading').busy(b)
+end, 10))
+header = row('Pull requests (1) [all]')
+vim.api.nvim_win_set_cursor(0, { header, 0 }); press('<Tab>')
+before, reads, cursor = lines(), pr_reads, vim.api.nvim_win_get_cursor(0)
+branch_prs = {}
+press('<CR>')
+assert(vim.wait(5000, function() return #notices == 3 and not require('git.features.loading').busy(b) end, 10))
+no_branch_notice(3)
+assert(vim.deep_equal(lines(), before) and pr_reads == reads + 1 and vim.fn.foldclosed(header) == -1
+  and vim.deep_equal(vim.api.nvim_win_get_cursor(0), cursor), 'An empty response replaced the all scope or changed its fold/cursor')
+press('<CR>'); no_branch_notice(4)
+assert(pr_reads == reads + 1, 'Repeated empty branch selection repeated the lookup')
+
+git({ 'checkout', '--detach', '-q' }); press('R')
+assert(vim.wait(5000, function()
+  return row('Pull requests (1) [all]') and not require('git.features.loading').busy(b)
+end, 10))
+header = row('Pull requests (1) [all]')
+vim.api.nvim_win_set_cursor(0, { header, 0 })
+before, reads = lines(), pr_reads
+press('<CR>'); no_branch_notice(5)
+assert(vim.deep_equal(lines(), before) and pr_reads == reads, 'Detached HEAD lost access to all PRs')
+
+vim.notify = notify
 vim.api.nvim_buf_delete(b, { force = true })
 vim.system, vim.fn.executable = original_system, original_executable
 vim.fn.delete(root, 'rf')
-print('PASS: clean scopes collapse, empty PRs hide, new commits and branch PRs reopen atomically')
+print('PASS: automatic PR scopes, empty branch selection retains all PRs/folds/cursor, picker parity and disappearing PRs')
