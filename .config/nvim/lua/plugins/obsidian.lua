@@ -33,6 +33,7 @@ return {
     "Obsidian",
     "ObsidianMenu",
     "ObsidianSidebar",
+    "ObsidianLocalGraph",
     "ObsidianDashboard",
   },
   keys = {

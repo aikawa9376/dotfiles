@@ -81,6 +81,11 @@ local items = {
     description = "見出し・リンク・バックリンクを右側に表示する",
     command = "ObsidianSidebar",
   },
+  {
+    label = "Local graph",
+    description = "現在のノートを中心にリンク元・リンク先とその先の枝を表示する",
+    command = "ObsidianLocalGraph",
+  },
 }
 
 local function open_menu()
