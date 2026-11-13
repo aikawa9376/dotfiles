@@ -325,6 +325,8 @@ local function resolve_from_config(agent_cfg)
     enabled = enabled,
     view = normalized_view_name(agent_acp.view or global_cfg.view),
     footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
+    footer_position = tostring(agent_acp.footer_position or global_cfg.footer_position):lower() == "inline" and "inline" or "bottom",
+    thinking_align = tostring(agent_acp.thinking_align or global_cfg.thinking_align):lower() == "left" and "left" or "center",
     protocol_log = resolve_boolean_option(agent_acp.protocol_log, global_cfg.protocol_log, false),
     show_context_notes = resolve_boolean_option(agent_acp.show_context_notes, global_cfg.show_context_notes, false),
     show_session_summary = resolve_boolean_option(
@@ -422,6 +424,8 @@ function M.resolve(agent_name, agent_cfg)
       v2_adapter = vim.deepcopy(session.v2_adapter or { enabled = false }),
       experimental = vim.deepcopy(session.experimental or {}),
       footer_animation = session.footer_animation,
+      footer_position = session.footer_position,
+      thinking_align = session.thinking_align,
       protocol_log = session.protocol_log,
       show_context_notes = session.show_context_notes,
       show_session_summary = session.show_session_summary,

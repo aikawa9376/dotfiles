@@ -51,6 +51,8 @@ function M.run()
   local state = { sessions = {}, opts = { hooks = { reload_mode = "hook" } }, editor_instance_id = "test-editor" }
   local acp_defaults = {
     footer_animation = true,
+    footer_position = "inline",
+    thinking_align = "left",
     protocol_log = true,
     show_context_notes = true,
     show_session_summary = true,
@@ -174,6 +176,10 @@ function M.run()
   assert_equal(state.sessions[key_a].show_session_summary, true, "session summary option stored on runtime session")
   assert_equal(splits[1].show_thread_title, true, "thread title option forwarded to ACP backend")
   assert_equal(state.sessions[key_a].show_thread_title, true, "thread title option stored on runtime session")
+  assert_equal(splits[1].footer_position, "inline", "footer position forwarded to ACP backend")
+  assert_equal(state.sessions[key_a].footer_position, "inline", "footer position stored on runtime session")
+  assert_equal(splits[1].thinking_align, "left", "thinking alignment forwarded to ACP backend")
+  assert_equal(state.sessions[key_a].thinking_align, "left", "thinking alignment stored on runtime session")
   assert_equal(splits[2].provider_id, "Codex", "second backend provider")
   assert_equal(splits[1].mcp_servers[1].name, "fixture", "MCP servers forwarded to ACP backend")
   assert_equal(splits[1].env.LAZYAGENT_SESSION_KEY, key_a, "ACP child receives its LazyAgent session key")

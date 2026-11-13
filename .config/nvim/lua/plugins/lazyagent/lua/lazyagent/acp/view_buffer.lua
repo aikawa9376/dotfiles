@@ -35,6 +35,7 @@ local queue_markdown_rendering
 local is_acp_buffer
 local layout_entry
 local buffer_is_visible
+local should_follow_output
 local discard_pending_append
 local buffer_has_deferred_updates
 local set_window_size
@@ -261,6 +262,32 @@ local function ensure_highlights()
   require("lazyagent.acp.highlights").setup()
 end
 
+local footer_render_hooks = setmetatable({}, { __mode = "k" })
+
+local function hook_markdown_footer_layout()
+  local ok, renderer_state = pcall(markdown_renderer.require, "state")
+  local callbacks = ok and renderer_state.on
+  if type(callbacks) ~= "table" or footer_render_hooks[callbacks] then return end
+  local render = callbacks.render
+  callbacks.render = function(event)
+    if render then render(event) end
+    local bufnr = event.buf
+    if not vim.api.nvim_buf_is_valid(bufnr) or not is_acp_buffer(bufnr) or not should_follow_output(bufnr) then return end
+    local entry = layout_entry(bufnr)
+    if entry.footer_layout_pending then return end
+    entry.footer_layout_pending = true
+    -- Render callbacks can run during an asynchronous parse. Reconcile only
+    -- after the renderer has finished applying its virtual/concealed rows.
+    vim.schedule(function()
+      entry.footer_layout_pending = nil
+      if layout_state[tostring(bufnr)] == entry and buffer_is_visible(bufnr) then
+        M._on_transcript_layout_changed(bufnr)
+      end
+    end)
+  end
+  footer_render_hooks[callbacks] = true
+end
+
 local function refresh_markdown_rendering(bufnr)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -299,6 +326,7 @@ local function refresh_markdown_rendering(bufnr)
 
   local ok_ui, ui = pcall(markdown_renderer.require, "core.ui")
   if ok_ui and type(ui.update) == "function" then
+    hook_markdown_footer_layout()
     pcall(ui.update, bufnr, wins[1], "LazyAgentACPUpdate", false)
   end
 
@@ -871,7 +899,7 @@ local restore_transcript_window = view_windowing.restore_transcript_window
 local restore_detached_transcript_windows = view_windowing.restore_detached_transcript_windows
 layout_entry = view_windowing.layout_entry
 local footer_padding_count = view_windowing.footer_padding_count
-local should_follow_output = view_windowing.should_follow_output
+should_follow_output = view_windowing.should_follow_output
 local set_follow_output = view_windowing.set_follow_output
 local pause_follow_output = view_windowing.pause_follow_output
 set_window_size = view_windowing.set_window_size
@@ -1104,9 +1132,15 @@ footer_view = view_footer.new({
     return transcript_line_count(bufnr)
   end,
   overlay_target_width = overlay_target_width,
+  thinking_target_width = function(bufnr)
+    local win = first_visible_window(bufnr)
+    return win and vim.api.nvim_win_get_width(win) or overlay_target_width(bufnr)
+  end,
   layout_entry = layout_entry,
   footer_padding_count = footer_padding_count,
   set_footer_padding = set_footer_padding,
+  footer_padding_target = view_updates.footer_padding_target,
+  scroll_buffer_to_end = scroll_buffer_to_end,
   buffer_is_visible = function(bufnr)
     return buffer_is_visible(bufnr)
   end,

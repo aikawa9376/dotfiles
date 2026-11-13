@@ -159,6 +159,40 @@ function M.new(ctx)
     return out
   end
 
+  local function footer_padding_target(bufnr, count)
+    local entry = layout_entry(bufnr)
+    if count == 0 or entry.footer_position == "inline" then
+      entry.footer_gap_count = 0
+      return count
+    end
+    -- Freeze the spacer while reading history. Changing it can move a paused
+    -- viewport even though the transcript itself did not change.
+    if not should_follow_output(bufnr) then
+      return count + (entry.footer_gap_count or 0)
+    end
+
+    local current = footer_padding_count(bufnr)
+    local placeholder = current == 0 and transcript_line_count(bufnr) == 0 and 1 or 0
+    local gap = 0
+    for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+      if vim.api.nvim_win_is_valid(win) then
+        local height = vim.api.nvim_win_get_height(win)
+        -- Include virtual rows after the last transcript line, but subtract
+        -- our real empty rows. Stop measuring once no spacer can be needed.
+        local opts = { max_height = height + current }
+        local ok, measured = pcall(vim.api.nvim_win_text_height, win, opts)
+        if not ok then -- Older Neovim versions lack max_height.
+          ok, measured = pcall(vim.api.nvim_win_text_height, win, {})
+        end
+        if ok then
+          gap = math.max(gap, height - (measured.all - current - placeholder) - count)
+        end
+      end
+    end
+    entry.footer_gap_count = gap
+    return count + gap
+  end
+
   local function set_footer_padding(bufnr, count)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
       return
@@ -171,12 +205,24 @@ function M.new(ctx)
       return
     end
 
-    local transcript_stop = transcript_line_count(bufnr)
-    local padding = {}
-    for _ = 1, target do
-      padding[#padding + 1] = ""
+    if should_follow_output(bufnr) then M._expect_follow_reflow(bufnr) end
+    -- Keep the first spacer row intact: Markdown tables can anchor their
+    -- bottom border/virtual rows there. Replacing the whole tail moves those
+    -- right-gravity marks past the footer instead of keeping them by the text.
+    if target > current then
+      local padding = {}
+      for _ = 1, target - current do padding[#padding + 1] = "" end
+      local stop = vim.api.nvim_buf_line_count(bufnr)
+      if current == 0 and transcript_line_count(bufnr) == 0 then
+        -- Replace Neovim's required empty placeholder, rather than treating it
+        -- as a transcript row when the first output arrives.
+        replace_buffer_lines(bufnr, 0, -1, padding)
+      else
+        replace_buffer_lines(bufnr, stop, stop, padding)
+      end
+    else
+      replace_buffer_lines(bufnr, transcript_line_count(bufnr) + target, -1, {})
     end
-    replace_buffer_lines(bufnr, transcript_stop, -1, padding)
     entry.footer_padding_count = target
   end
 
@@ -229,7 +275,7 @@ function M.new(ctx)
                 apply_transcript_window_opts(win, opts.is_vertical == true, opts)
               end
             end
-            pcall(refresh_buffer_layout, bufnr)
+            pcall(refresh_buffer_layout, bufnr, { check_footer = true })
           end
         end
       end,
@@ -453,10 +499,16 @@ function M.new(ctx)
       if vim.api.nvim_win_is_valid(win) then
         smooth_scroll.stop_window(win)
         vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
-        if opts and opts.reset_view then
+        local position = vim.fn.screenpos(win, row, 1)
+        local bottom = vim.api.nvim_win_get_position(win)[1] + vim.api.nvim_win_get_height(win)
+        if (opts and opts.reset_view)
+          or (layout_entry(bufnr).footer_position ~= "inline" and position.row > 0 and position.row < bottom)
+        then
           -- Replacing the transcript can leave its last row at the top of the
-          -- window. Move away first so returning to the end fills the viewport.
-          -- Window-local APIs also keep command-line completion undisturbed.
+          -- window; shrinking decorations can also expose space below it.
+          -- Move away first so returning to the end fills the viewport. Use
+          -- only window-local APIs to preserve command-line completion.
+          if M._expect_follow_reflow then M._expect_follow_reflow(bufnr) end
           pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
         end
         pcall(vim.api.nvim_win_set_cursor, win, { row, col })
@@ -946,6 +998,7 @@ function M.new(ctx)
 
   return {
     set_footer_padding = set_footer_padding,
+    footer_padding_target = footer_padding_target,
     ensure_layout_autocmds = ensure_layout_autocmds,
     scroll_buffer_to_end = scroll_buffer_to_end,
     transcript_line_count = transcript_line_count,

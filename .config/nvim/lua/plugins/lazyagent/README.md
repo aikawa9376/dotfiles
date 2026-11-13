@@ -492,6 +492,8 @@ require("lazyagent").setup({
     default_mode = "bypassPermissions",
     initial_model = "gpt-5.4",
     fancy_mode = true,
+    footer_position = "bottom", -- "bottom" | "inline"
+    thinking_align = "center", -- "center" | "left"
     protocol_log = false,
     show_context_notes = false,
     show_session_summary = false,
@@ -634,6 +636,10 @@ compaction で省略された以前のやり取りも含めて全文を全画面
 `:LazyAgentACPRawTranscript [agent]` は live transcript file を通常ウィンドウにそのまま開く raw log viewer です。
 
 footer は advertise された metadata を使って、provider / model / mode / reasoning / context usage / remaining context / turn usage / cumulative usage / provider-specific usage をできるだけ表示します。native session title / summary は `acp.show_session_summary = true` のときだけ表示します。
+
+buffer 表示の `acp.footer_position` は `"bottom"`（既定）で追従中に同じウィンドウの下端へ揃い、`"inline"` で従来どおり本文末尾に続けて表示します。下端配置では本文が短い間は間の余白が減り、埋まった後は本文が上へ流れます。過去ログへスクロールすると footer も画面外へ流れ、追従を再開すると下端へ戻ります。
+
+Thinking 表示は本文の直下に置き、metadata の footer とは余白を挟んで分けます。`acp.thinking_align = "center"`（既定）で横方向の中央に、`"left"` で左寄せに表示します。どちらの option も `interactive_agents.<name>.acp` で agent ごとに上書きできます。`footer_animation = false` でも Thinking の文字は表示します。
 
 ACP の command palette と config picker も advertise された説明・category・input hint をできるだけ表示し、boolean / toggle 系 option は picker から直接切り替えられます。
 

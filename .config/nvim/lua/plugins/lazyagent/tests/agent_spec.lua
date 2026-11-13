@@ -12,6 +12,17 @@ function M.run()
   local state = require("lazyagent.logic.state")
   local previous_opts = state.opts
 
+  local acp = require("lazyagent.logic.acp")
+  state.opts = { acp = {} }
+  assert_equal(acp.resolve(nil, {}).footer_position, "bottom", "footer defaults to the window bottom")
+  assert_equal(acp.resolve(nil, {}).thinking_align, "center", "thinking defaults to horizontal centering")
+  state.opts.acp = { footer_position = "inline", thinking_align = "left" }
+  assert_equal(acp.resolve(nil, {}).footer_position, "inline", "global legacy footer position")
+  assert_equal(acp.resolve(nil, {}).thinking_align, "left", "global thinking alignment")
+  local overridden = acp.resolve(nil, { acp = { footer_position = "bottom", thinking_align = "center" } })
+  assert_equal(overridden.footer_position, "bottom", "per-agent footer position overrides global")
+  assert_equal(overridden.thinking_align, "center", "per-agent thinking alignment overrides global")
+
   local antigravity = defaults.interactive_agents.Antigravity
   assert_equal(antigravity.cmd, "agy", "Antigravity CLI command")
   assert_equal(antigravity.acp, false, "Antigravity uses the CLI backend")

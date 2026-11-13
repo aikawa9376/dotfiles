@@ -92,6 +92,7 @@ local suites = {
   "tests.acp.updates_spec",
   "tests.acp.conversation_filter_spec",
   "tests.acp.view_footer_spec",
+  "tests.acp.footer_layout_spec",
   "tests.acp.footer_animation_spec",
   "tests.acp.view_follow_spec",
   "tests.acp.image_follow_spec",

@@ -19,6 +19,12 @@ function M.new(ctx)
     return ctx.session_for_agent(agent_name)
   end
 
+  local function display_option(session, key, default)
+    local acp = state and state.opts and state.opts.acp
+    acp = type(acp) == "table" and acp or {}
+    return tostring((session and session[key]) or acp[key] or default):lower()
+  end
+
   local function find_config_option(session, keys)
     if not session or type(session.acp_config_options) ~= "table" then
       return nil
@@ -416,8 +422,8 @@ function M.new(ctx)
       return " " .. (message ~= "" and message or "Waiting..."), info_hl
     end
 
-    if session_has_animated_footer(session) then
-      return message ~= "" and message or "Thinking...", "LazyAgentACPFooterActive", true
+    if session.agent_status == "thinking" then
+      return message ~= "" and message or "Thinking...", "LazyAgentACPFooterActive", footer_animation_enabled(session)
     end
 
     -- 描画中（monitor_timer のみ）はアニメせず、他の情報行と同じ Meta 色で
@@ -725,8 +731,10 @@ function M.new(ctx)
     end
 
     if has_status then
-      table.insert(lines, blank_footer_line(info_hl))
-      table.insert(lines, { text = " " .. status_text, hl = status_hl or info_hl, animate = status_animate })
+      local stream = session and session.agent_status == "thinking"
+        and not session.acp_failed and session.agent_status_message ~= "Disconnected"
+      table.insert(lines, { text = "", hl = info_hl, stream = stream })
+      table.insert(lines, { text = " " .. status_text, hl = status_hl or info_hl, animate = status_animate, stream = stream })
     end
 
     if #meta > 0 or has_context then
@@ -768,14 +776,22 @@ function M.new(ctx)
     local rendered = {}
     local highlights = {}
     local animations = {}
-    for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count, info_hl)) do
-      for _, wrapped in ipairs(wrap_footer_text(line.text or "", wrap_width)) do
+    local columns, stream_count = {}, 0
+    local session = session_for_agent(agent_name)
+    local center = display_option(session, "thinking_align", "center") ~= "left"
+    local center_width = ctx.thinking_target_width and ctx.thinking_target_width(bufnr) or wrap_width
+    for _, line in ipairs(footer_render_lines(agent_name, session, line_count, info_hl)) do
+      local text = line.text or ""
+      if line.stream and center then text = text:gsub("^ ", "") end
+      for _, wrapped in ipairs(wrap_footer_text(text, wrap_width)) do
         table.insert(rendered, wrapped)
         table.insert(highlights, line.hl or info_hl)
         table.insert(animations, line.animate == true)
+        columns[#rendered] = line.stream and center and math.max(0, math.floor((center_width - strdisplaywidth(wrapped)) / 2)) or 0
+        if line.stream then stream_count = stream_count + 1 end
       end
     end
-    return rendered, highlights, animations
+    return rendered, highlights, animations, columns, stream_count
   end
 
   local function build_line_chunks(line_text, hl, animate)
@@ -875,10 +891,14 @@ function M.new(ctx)
       return
     end
 
-    local footer_lines, footer_hls, footer_anims = render_footer_lines(bufnr)
+    local footer_lines, footer_hls, footer_anims, footer_columns, stream_count = render_footer_lines(bufnr)
     footer_hls = footer_hls or {}
     footer_anims = footer_anims or {}
+    footer_columns = footer_columns or {}
+    stream_count = stream_count or 0
     local entry = ctx.layout_entry(bufnr)
+    entry.footer_position = display_option(session_for_agent(ctx.agent_name_for_bufnr(bufnr)), "footer_position", "bottom") == "inline"
+      and "inline" or "bottom"
     entry.footer_extmark_ids = entry.footer_extmark_ids or {}
 
     -- 旧 virt_lines 実装で使っていた anchor extmark は不要なので明示破棄。
@@ -888,7 +908,7 @@ function M.new(ctx)
     end
 
     -- 静的部分の署名（アニメ frame は含めない）。
-    local base_parts = { FOOTER_RENDER_VERSION, tostring(#footer_lines) }
+    local base_parts = { FOOTER_RENDER_VERSION, tostring(#footer_lines), entry.footer_position, tostring(stream_count) }
     local has_anim = false
     for idx, line in ipairs(footer_lines) do
       local animate = footer_anims[idx] == true
@@ -896,6 +916,7 @@ function M.new(ctx)
         has_anim = true
       end
       base_parts[#base_parts + 1] = tostring(footer_hls[idx] or "")
+      base_parts[#base_parts + 1] = ":" .. tostring(footer_columns[idx] or 0) .. ":"
       base_parts[#base_parts + 1] = animate and "1" or "0"
       base_parts[#base_parts + 1] = "\0"
       base_parts[#base_parts + 1] = tostring(line or "")
@@ -913,21 +934,30 @@ function M.new(ctx)
         local hl = footer_hls[idx]
         local animate = footer_anims[idx] == true
         if animate then
-          rendered[#rendered + 1] = { animate = true, text = tostring(line or "") }
+          rendered[#rendered + 1] = { animate = true, text = tostring(line or ""), column = footer_columns[idx] or 0 }
         else
-          rendered[#rendered + 1] = { animate = false, chunks = build_line_chunks(line, hl, false) }
+          rendered[#rendered + 1] = { animate = false, chunks = build_line_chunks(line, hl, false), column = footer_columns[idx] or 0 }
         end
       end
       cache = { base_sig = base_sig, rendered = rendered, has_anim = has_anim }
       entry.footer_render_cache = cache
     end
 
-    -- padding は必要数とずれている時だけ調整（毎フレームの flicker 防止）。
-    if ctx.footer_padding_count(bufnr) ~= #footer_lines then
-      ctx.set_footer_padding(bufnr, #footer_lines)
+    -- Keep animation ticks free of geometry queries unless the footer height
+    -- itself changed. Layout/render events reconcile the spacer separately.
+    local padding_count = ctx.footer_padding_count(bufnr)
+    local target_padding = padding_count
+    if not opts.animation_tick or entry.footer_line_count ~= #footer_lines then
+      target_padding = ctx.footer_padding_target and ctx.footer_padding_target(bufnr, #footer_lines) or #footer_lines
+    end
+    local padding_changed = padding_count ~= target_padding
+    entry.footer_line_count = #footer_lines
+    if padding_changed then
+      ctx.set_footer_padding(bufnr, target_padding)
     end
 
-    local full_sig = cache.has_anim and (base_sig .. "@" .. tostring(footer_animation.frame())) or base_sig
+    local positioned_sig = base_sig .. ":" .. tostring(vim.api.nvim_buf_line_count(bufnr)) .. ":" .. tostring(target_padding)
+    local full_sig = cache.has_anim and (positioned_sig .. "@" .. tostring(footer_animation.frame())) or positioned_sig
     if not opts.force and entry.footer_signature == full_sig then
       if not opts.animation_tick then sync_footer_animation_timer() end
       return
@@ -946,9 +976,11 @@ function M.new(ctx)
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     local footer_base = math.max(0, line_count - #cache.rendered)
+    local stream_base = math.max(0, line_count - target_padding)
 
     for idx, item in ipairs(cache.rendered) do
-      local row = math.min(math.max(0, line_count - 1), footer_base + idx - 1)
+      local base = idx <= stream_count and stream_base or footer_base
+      local row = math.min(math.max(0, line_count - 1), base + idx - 1)
       local prev_id = entry.footer_extmark_ids[idx]
       local skip_static = false
       if static_unchanged and not item.animate and prev_id then
@@ -968,6 +1000,7 @@ function M.new(ctx)
         local extmark_opts = {
           virt_text = chunks,
           virt_text_pos = "overlay",
+          virt_text_win_col = item.column,
           hl_mode = "replace",
           undo_restore = false,
           right_gravity = true,
@@ -1000,6 +1033,9 @@ function M.new(ctx)
       end
     end
 
+    if padding_changed and ctx.should_follow_output and ctx.should_follow_output(bufnr) and ctx.scroll_buffer_to_end then
+      ctx.scroll_buffer_to_end(bufnr)
+    end
     if not opts.animation_tick then sync_footer_animation_timer() end
   end
 

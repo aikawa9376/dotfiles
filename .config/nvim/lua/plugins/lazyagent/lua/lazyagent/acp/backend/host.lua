@@ -1306,6 +1306,8 @@ function M.setup(deps)
       smooth_scroll = vim.deepcopy(base_session.smooth_scroll or {}),
       release_buffer_on_hide = base_session.release_buffer_on_hide,
       footer_animation = false,
+      footer_position = base_session.footer_position,
+      thinking_align = base_session.thinking_align,
       protocol_log = base_session.protocol_log,
       show_context_notes = base_session.show_context_notes,
       show_session_summary = base_session.show_session_summary,
