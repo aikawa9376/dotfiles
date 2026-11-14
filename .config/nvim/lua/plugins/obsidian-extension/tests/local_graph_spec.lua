@@ -71,6 +71,18 @@ for _, edge in ipairs(selected.extra) do
   end
 end
 assert(reciprocal_count == 1, "reciprocal cross-branch links have a single edge")
+local grouped = { nodes = {}, incoming = {}, outgoing = {
+  root = { a = true, b = true, c = true, d = true, z = true },
+  a = { b = true, c = true, d = true },
+  b = { a = true }, d = { a = true }, z = { c = true },
+} }
+for _, id in ipairs({ "root", "a", "b", "c", "d", "z" }) do
+  grouped.nodes[id] = { title = id, relative_path = "notes/" .. id .. ".md" }
+end
+assert(vim.deep_equal(graph._select_graph(grouped, "root", opts).extra, {
+  { from = "a", to = "c" }, { from = "z", to = "c" },
+  { from = "a", to = "b" }, { from = "a", to = "d" },
+}), "cross-branch links group by relationship before source and destination paths")
 opts.depth = 2
 selected = graph._select_graph(index, a, opts)
 assert(selected.distance[deep] == 2 and #selected.order == 8, "depth two adds connected notes exactly once despite cycles")
@@ -120,6 +132,10 @@ assert(incoming_heading and outgoing_heading and mutual_heading
   and incoming_heading < outgoing_heading and outgoing_heading < mutual_heading,
   "direction headings make the groups visible")
 assert(text():find("[notes/b.md] ↔ C", 1, true), "reciprocal neighbor edges render with a bidirectional arrow")
+local outgoing_neighbor = text():find("[notes/sub/d.md] → B", 1, true)
+local mutual_neighbor = text():find("[notes/b.md] ↔ C", 1, true)
+assert(outgoing_neighbor and mutual_neighbor and outgoing_neighbor < mutual_neighbor,
+  "neighbor link rows display outgoing relationships before mutual relationships")
 local marks = vim.api.nvim_buf_get_extmarks(state.buf, vim.api.nvim_create_namespace("ObsidianLocalGraph"), 0, -1, { details = true })
 local function has_highlight(id, token, group)
   local lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)

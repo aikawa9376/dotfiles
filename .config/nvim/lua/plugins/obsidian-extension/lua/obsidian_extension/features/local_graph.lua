@@ -272,7 +272,15 @@ local function select_graph(graph, center, opts, query)
         end
       end
     end
-    table.sort(result.extra, function(a, b) return a.from .. a.to < b.from .. b.to end)
+    table.sort(result.extra, function(a, b)
+      local a_direction = link_direction(graph, a.from, a.to)
+      local b_direction = link_direction(graph, b.from, b.to)
+      if a_direction ~= b_direction then return a_direction < b_direction end
+      local a_from = graph.nodes[a.from].relative_path
+      local b_from = graph.nodes[b.from].relative_path
+      if a_from ~= b_from then return a_from < b_from end
+      return graph.nodes[a.to].relative_path < graph.nodes[b.to].relative_path
+    end)
   end
   return result
 end
