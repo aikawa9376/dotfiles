@@ -29,9 +29,6 @@ local function setup_highlights()
     for branch, target in ipairs(branches) do
       vim.api.nvim_set_hl(0, ("ObsidianLocalGraphBranch%dDepth%d"):format(branch, depth), { default = true, link = target })
     end
-    for direction, target in pairs({ Outgoing = "String", Incoming = "Special", Mutual = "Type" }) do
-      vim.api.nvim_set_hl(0, ("ObsidianLocalGraph%sDepth%d"):format(direction, depth), { default = true, link = target })
-    end
   end
 end
 
@@ -336,12 +333,11 @@ local function render()
       if node.missing then parts[#parts + 1] = { " (missing)", "ObsidianLocalGraphMissing" } end
       return parts
     end
-    local function arrow(parent, child, depth)
+    local function arrow(parent, child, highlight)
       local outgoing = state.graph.outgoing[parent] and state.graph.outgoing[parent][child]
       local incoming = state.graph.outgoing[child] and state.graph.outgoing[child][parent]
       local text = outgoing and (incoming and "↔ " or "→ ") or "← "
-      local direction = outgoing and (incoming and "Mutual" or "Outgoing") or "Incoming"
-      return { text, ("ObsidianLocalGraph%sDepth%d"):format(direction, depth) }
+      return { text, highlight }
     end
     add_parts(vim.list_extend({ { "● ", "ObsidianLocalGraphCenter" } }, label_parts(state.center, "ObsidianLocalGraphCenter")), state.center)
     local function branch(parent, prefix)
@@ -352,7 +348,7 @@ local function render()
         local depth = selected.distance[id]
         local highlight = ("ObsidianLocalGraphBranch%dDepth%d"):format(branch_color, depth)
         local parts = {
-          { prefix, "ObsidianLocalGraphTree" }, { last and "└─ " or "├─ ", highlight }, arrow(parent, id, depth),
+          { prefix, "ObsidianLocalGraphTree" }, { last and "└─ " or "├─ ", highlight }, arrow(parent, id, highlight),
         }
         add_parts(vim.list_extend(parts, label_parts(id, highlight)), id)
         branch(id, prefix .. (last and "   " or "│  "))
@@ -369,7 +365,7 @@ local function render()
             or ("ObsidianLocalGraphBranch%dDepth%d"):format(selected.branch_colors[id], selected.distance[id])
         end
         local parts = vim.list_extend({ { "  " } }, label_parts(edge.from, node_highlight(edge.from)))
-        parts[#parts + 1] = { " → ", "ObsidianLocalGraphTree" }
+        parts[#parts + 1] = { " → ", node_highlight(edge.to) }
         add_parts(vim.list_extend(parts, label_parts(edge.to, node_highlight(edge.to))), edge.to)
       end
     end

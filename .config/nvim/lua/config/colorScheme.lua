@@ -65,13 +65,9 @@ local function apply_colorscheme()
     return ("#%02x%02x%02x"):format(unpack(channels))
   end
   local graph_branches = { "#81a1c1", "#98be65", "#e5c07b", "#7bb8c1", "#c678dd" }
-  local graph_directions = { Outgoing = "#98be65", Incoming = "#7bb8c1", Mutual = "#c678dd" }
   for depth = 1, 10 do
     for branch, color in ipairs(graph_branches) do
       set_highlight(("ObsidianLocalGraphBranch%dDepth%d"):format(branch, depth), { fg = graph_color(color, depth) })
-    end
-    for direction, color in pairs(graph_directions) do
-      set_highlight(("ObsidianLocalGraph%sDepth%d"):format(direction, depth), { fg = graph_color(color, depth), bold = true })
     end
   end
   set_highlight("GitStatusFolded", { fg = "#839496", bg = "NONE" })
