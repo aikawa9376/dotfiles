@@ -15,6 +15,26 @@ local config = vim.deepcopy(defaults)
 local state = { generation = 0, entries = {}, cache = {}, query = "" }
 local ns = vim.api.nvim_create_namespace("ObsidianLocalGraph")
 
+local function setup_highlights()
+  local links = {
+    Title = "Title", Center = "Special", Heading = "Title", Path = "Comment", Tree = "Comment",
+    Missing = "DiagnosticWarn", Enabled = "DiagnosticOk", Disabled = "Comment", Key = "Special",
+    Value = "Number", Match = "Search",
+  }
+  for name, target in pairs(links) do
+    vim.api.nvim_set_hl(0, "ObsidianLocalGraph" .. name, { default = true, link = target })
+  end
+  local branches = { "Directory", "String", "Number", "Special", "Type" }
+  for depth = 1, 10 do
+    for branch, target in ipairs(branches) do
+      vim.api.nvim_set_hl(0, ("ObsidianLocalGraphBranch%dDepth%d"):format(branch, depth), { default = true, link = target })
+    end
+    for direction, target in pairs({ Outgoing = "String", Incoming = "Special", Mutual = "Type" }) do
+      vim.api.nvim_set_hl(0, ("ObsidianLocalGraph%sDepth%d"):format(direction, depth), { default = true, link = target })
+    end
+  end
+end
+
 local function inside(path, root)
   return path:sub(1, #root + 1) == root .. "/"
 end
@@ -173,7 +193,7 @@ local function build_graph(entries, root, notes_subdir)
 end
 
 local function select_graph(graph, center, opts, query)
-  local result = { order = {}, parent = {}, distance = {}, children = {}, extra = {}, truncated = false }
+  local result = { order = {}, parent = {}, distance = {}, children = {}, branch_colors = {}, extra = {}, truncated = false }
   if not graph.nodes[center] then return result end
   local queue = { center }
   result.distance[center] = 0
@@ -202,6 +222,17 @@ local function select_graph(graph, center, opts, query)
           end
         end
       end
+    end
+  end
+  -- Assign hues before filtering so a branch keeps its color when siblings disappear.
+  local branch_count = 0
+  for _, id in ipairs(queue) do
+    local parent = result.parent[id]
+    if parent == center then
+      branch_count = branch_count + 1
+      result.branch_colors[id] = (branch_count - 1) % 5 + 1
+    elseif parent then
+      result.branch_colors[id] = result.branch_colors[parent]
     end
   end
   local keep = { [center] = true }
@@ -253,32 +284,77 @@ local function render()
   local function add(text, id, highlight)
     lines[#lines + 1] = text
     entries[#lines] = id
-    highlights[#lines] = highlight
+    if highlight then highlights[#highlights + 1] = { #lines - 1, 0, -1, highlight } end
+  end
+  local function add_parts(parts, id)
+    local texts = {}
+    for _, part in ipairs(parts) do texts[#texts + 1] = part[1] end
+    add(table.concat(texts), id)
+    local column = 0
+    for _, part in ipairs(parts) do
+      local text, highlight = part[1], part[2]
+      if highlight then highlights[#highlights + 1] = { #lines - 1, column, column + #text, highlight } end
+      if part[3] and state.query ~= "" then
+        local start = 1
+        while start <= #text do
+          local first, last = text:lower():find(state.query:lower(), start, true)
+          if not first then break end
+          highlights[#highlights + 1] = { #lines - 1, column + first - 1, column + last, "ObsidianLocalGraphMatch" }
+          start = last + 1
+        end
+      end
+      column = column + #text
+    end
   end
   local function flag(value) return value and "on" or "off" end
-  add("LOCAL GRAPH · ローカルグラフ", nil, "Title")
-  add(("Depth %d   Incoming %s   Outgoing %s"):format(config.depth, flag(config.incoming), flag(config.outgoing)), nil, "Comment")
-  add(("Neighbor links %s   Existing only %s   Follow %s"):format(flag(config.neighbor_links), flag(config.existing_only), flag(config.follow)), nil, "Comment")
-  if state.query ~= "" then add("Filter: " .. state.query, nil, "Special") end
+  local function flag_part(value)
+    return { flag(value), value and "ObsidianLocalGraphEnabled" or "ObsidianLocalGraphDisabled" }
+  end
+  add("LOCAL GRAPH · ローカルグラフ", nil, "ObsidianLocalGraphTitle")
+  add_parts({
+    { "Depth ", "Comment" }, { tostring(config.depth), "ObsidianLocalGraphValue" },
+    { "   Incoming ", "Comment" }, flag_part(config.incoming),
+    { "   Outgoing ", "Comment" }, flag_part(config.outgoing),
+  })
+  add_parts({
+    { "Neighbor links ", "Comment" }, flag_part(config.neighbor_links),
+    { "   Existing only ", "Comment" }, flag_part(config.existing_only),
+    { "   Follow ", "Comment" }, flag_part(config.follow),
+  })
+  if state.query ~= "" then
+    add_parts({ { "Filter: ", "Comment" }, { state.query, "ObsidianLocalGraphMatch" } })
+  end
   add("")
   if state.graph and state.graph.nodes[state.center] then
     local selected = select_graph(state.graph, state.center, config, state.query)
-    local function label(id)
+    local function label_parts(id, highlight)
       local node = state.graph.nodes[id]
-      return node.title:gsub("[\r\n\t]", " ") .. "  [" .. node.relative_path .. "]" .. (node.missing and " (missing)" or "")
+      local parts = {
+        { node.title:gsub("[\r\n\t]", " "), node.missing and "ObsidianLocalGraphMissing" or highlight, true },
+        { "  [" .. node.relative_path .. "]", "ObsidianLocalGraphPath", true },
+      }
+      if node.missing then parts[#parts + 1] = { " (missing)", "ObsidianLocalGraphMissing" } end
+      return parts
     end
-    local function arrow(parent, child)
+    local function arrow(parent, child, depth)
       local outgoing = state.graph.outgoing[parent] and state.graph.outgoing[parent][child]
       local incoming = state.graph.outgoing[child] and state.graph.outgoing[child][parent]
-      return outgoing and (incoming and "↔ " or "→ ") or "← "
+      local text = outgoing and (incoming and "↔ " or "→ ") or "← "
+      local direction = outgoing and (incoming and "Mutual" or "Outgoing") or "Incoming"
+      return { text, ("ObsidianLocalGraph%sDepth%d"):format(direction, depth) }
     end
-    add("● " .. label(state.center), state.center, "Directory")
+    add_parts(vim.list_extend({ { "● ", "ObsidianLocalGraphCenter" } }, label_parts(state.center, "ObsidianLocalGraphCenter")), state.center)
     local function branch(parent, prefix)
       local children = selected.children[parent] or {}
       for index, id in ipairs(children) do
         local last = index == #children
-        add(prefix .. (last and "└─ " or "├─ ") .. arrow(parent, id) .. label(id), id,
-          state.graph.nodes[id].missing and "DiagnosticWarn" or "Underlined")
+        local branch_color = selected.branch_colors[id]
+        local depth = selected.distance[id]
+        local highlight = ("ObsidianLocalGraphBranch%dDepth%d"):format(branch_color, depth)
+        local parts = {
+          { prefix, "ObsidianLocalGraphTree" }, { last and "└─ " or "├─ ", highlight }, arrow(parent, id, depth),
+        }
+        add_parts(vim.list_extend(parts, label_parts(id, highlight)), id)
         branch(id, prefix .. (last and "   " or "│  "))
       end
     end
@@ -286,9 +362,15 @@ local function render()
     if #selected.order == 1 then add("  (No connected notes matching these filters)", nil, "Comment") end
     if #selected.extra > 0 then
       add("")
-      add("NEIGHBOR LINKS · 枝同士のリンク / 循環", nil, "Title")
+      add("NEIGHBOR LINKS · 枝同士のリンク / 循環", nil, "ObsidianLocalGraphHeading")
       for _, edge in ipairs(selected.extra) do
-        add("  " .. label(edge.from) .. " → " .. label(edge.to), edge.to, "Underlined")
+        local function node_highlight(id)
+          return id == state.center and "ObsidianLocalGraphCenter"
+            or ("ObsidianLocalGraphBranch%dDepth%d"):format(selected.branch_colors[id], selected.distance[id])
+        end
+        local parts = vim.list_extend({ { "  " } }, label_parts(edge.from, node_highlight(edge.from)))
+        parts[#parts + 1] = { " → ", "ObsidianLocalGraphTree" }
+        add_parts(vim.list_extend(parts, label_parts(edge.to, node_highlight(edge.to))), edge.to)
       end
     end
     add("")
@@ -299,14 +381,23 @@ local function render()
   end
   if state.loading and state.graph then add("Refreshing…", nil, "Comment") end
   add("")
-  add("<CR> open   c center   +/- depth   / filter", nil, "Comment")
-  add("i incoming   o outgoing   n neighbor links", nil, "Comment")
-  add("e existing only   f follow   R refresh   q close", nil, "Comment")
+  local function help(items)
+    local parts = {}
+    for index, item in ipairs(items) do
+      if index > 1 then parts[#parts + 1] = { "   " } end
+      parts[#parts + 1] = { item[1], "ObsidianLocalGraphKey" }
+      parts[#parts + 1] = { " " .. item[2], "Comment" }
+    end
+    add_parts(parts)
+  end
+  help({ { "<CR>", "open" }, { "c", "center" }, { "+/-", "depth" }, { "/", "filter" } })
+  help({ { "i", "incoming" }, { "o", "outgoing" }, { "n", "neighbor links" } })
+  help({ { "e", "existing only" }, { "f", "follow" }, { "R", "refresh" }, { "q", "close" } })
   vim.bo[state.buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
   vim.api.nvim_buf_clear_namespace(state.buf, ns, 0, -1)
-  for line, highlight in pairs(highlights) do
-    vim.api.nvim_buf_add_highlight(state.buf, ns, highlight, line - 1, 0, -1)
+  for _, highlight in ipairs(highlights) do
+    vim.api.nvim_buf_add_highlight(state.buf, ns, highlight[4], highlight[1], highlight[2], highlight[3])
   end
   vim.bo[state.buf].modifiable = false
   state.entries = entries
@@ -490,7 +581,7 @@ function M.open(depth)
   vim.wo[state.win].foldenable = false
   vim.wo[state.win].winfixwidth = true
   vim.wo[state.win].cursorline = true
-  vim.wo[state.win].winbar = " Local graph · ローカルグラフ"
+  vim.wo[state.win].winbar = "%#ObsidianLocalGraphTitle# Local graph %*· ローカルグラフ"
   local function map(key, action, desc)
     vim.keymap.set("n", key, action, { buffer = state.buf, silent = true, nowait = true, desc = desc })
   end
@@ -529,6 +620,8 @@ function M.setup(opts)
     M.open(depth)
   end, { nargs = "?", desc = "Open a local graph around the current note", complete = function() return { "1", "2", "3", "4", "5" } end })
   local group = vim.api.nvim_create_augroup("ObsidianExtensionLocalGraph", { clear = true })
+  setup_highlights()
+  vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = setup_highlights })
   local change = 0
   vim.api.nvim_create_autocmd("BufEnter", {
     group = group,

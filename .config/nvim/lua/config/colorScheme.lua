@@ -41,6 +41,39 @@ local function apply_colorscheme()
   set_highlight("GitBlameFileAdded", { fg = "#98be65" })
   set_highlight("GitBlameFileDeleted", { fg = "#e06c75" })
   set_highlight("GitBlameFileKey", { link = "GitActionMenuKey" })
+  set_highlight("ObsidianLocalGraphTitle", { fg = "#8fdbed", bold = true })
+  set_highlight("ObsidianLocalGraphCenter", { fg = "#e5c07b", bold = true })
+  set_highlight("ObsidianLocalGraphHeading", { fg = "#c678dd", bold = true })
+  set_highlight("ObsidianLocalGraphPath", { fg = "#586e75" })
+  set_highlight("ObsidianLocalGraphTree", { fg = "#586e75" })
+  set_highlight("ObsidianLocalGraphMissing", { fg = "#d19a66", italic = true })
+  set_highlight("ObsidianLocalGraphEnabled", { fg = "#98be65", bold = true })
+  set_highlight("ObsidianLocalGraphDisabled", { fg = "#586e75", italic = true })
+  set_highlight("ObsidianLocalGraphKey", { fg = "#7bb8c1", bold = true })
+  set_highlight("ObsidianLocalGraphValue", { fg = "#e5c07b", bold = true })
+  set_highlight("ObsidianLocalGraphMatch", { fg = "#CFC8B8", bg = "#20436e", bold = true })
+  -- Keep each branch's hue, fading deeper nodes toward the Solarized background.
+  local function graph_color(hex, depth)
+    local strength = 0.45 + 0.55 * 0.78 ^ (depth - 1)
+    local background = "#002b36"
+    local channels = {}
+    for offset = 2, 6, 2 do
+      local foreground = tonumber(hex:sub(offset, offset + 1), 16)
+      local base = tonumber(background:sub(offset, offset + 1), 16)
+      channels[#channels + 1] = math.floor(base + (foreground - base) * strength + 0.5)
+    end
+    return ("#%02x%02x%02x"):format(unpack(channels))
+  end
+  local graph_branches = { "#81a1c1", "#98be65", "#e5c07b", "#7bb8c1", "#c678dd" }
+  local graph_directions = { Outgoing = "#98be65", Incoming = "#7bb8c1", Mutual = "#c678dd" }
+  for depth = 1, 10 do
+    for branch, color in ipairs(graph_branches) do
+      set_highlight(("ObsidianLocalGraphBranch%dDepth%d"):format(branch, depth), { fg = graph_color(color, depth) })
+    end
+    for direction, color in pairs(graph_directions) do
+      set_highlight(("ObsidianLocalGraph%sDepth%d"):format(direction, depth), { fg = graph_color(color, depth), bold = true })
+    end
+  end
   set_highlight("GitStatusFolded", { fg = "#839496", bg = "NONE" })
   set_highlight("QuickFixLine", { bg = "#20436e", bold = true })
   set_highlight("StatusLine", { bg = "None" })
