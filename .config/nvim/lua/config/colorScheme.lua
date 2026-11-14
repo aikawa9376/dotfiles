@@ -52,7 +52,7 @@ local function apply_colorscheme()
   set_highlight("ObsidianLocalGraphKey", { fg = "#7bb8c1", bold = true })
   set_highlight("ObsidianLocalGraphValue", { fg = "#e5c07b", bold = true })
   set_highlight("ObsidianLocalGraphMatch", { fg = "#CFC8B8", bg = "#20436e", bold = true })
-  -- Keep each branch's hue, fading deeper nodes toward the Solarized background.
+  -- Direction determines the hue; depth fades it toward the Solarized background.
   local function graph_color(hex, depth)
     local strength = 0.45 + 0.55 * 0.78 ^ (depth - 1)
     local background = "#002b36"
@@ -64,10 +64,10 @@ local function apply_colorscheme()
     end
     return ("#%02x%02x%02x"):format(unpack(channels))
   end
-  local graph_branches = { "#81a1c1", "#98be65", "#e5c07b", "#7bb8c1", "#c678dd" }
+  local graph_directions = { Incoming = "#7bb8c1", Outgoing = "#98be65", Mutual = "#c678dd" }
   for depth = 1, 10 do
-    for branch, color in ipairs(graph_branches) do
-      set_highlight(("ObsidianLocalGraphBranch%dDepth%d"):format(branch, depth), { fg = graph_color(color, depth) })
+    for direction, color in pairs(graph_directions) do
+      set_highlight(("ObsidianLocalGraph%sDepth%d"):format(direction, depth), { fg = graph_color(color, depth) })
     end
   end
   set_highlight("GitStatusFolded", { fg = "#839496", bg = "NONE" })

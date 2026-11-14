@@ -14,6 +14,7 @@ local defaults = {
 local config = vim.deepcopy(defaults)
 local state = { generation = 0, entries = {}, cache = {}, query = "" }
 local ns = vim.api.nvim_create_namespace("ObsidianLocalGraph")
+local directions = { "Incoming", "Outgoing", "Mutual" }
 
 local function setup_highlights()
   local links = {
@@ -24,10 +25,9 @@ local function setup_highlights()
   for name, target in pairs(links) do
     vim.api.nvim_set_hl(0, "ObsidianLocalGraph" .. name, { default = true, link = target })
   end
-  local branches = { "Directory", "String", "Number", "Special", "Type" }
   for depth = 1, 10 do
-    for branch, target in ipairs(branches) do
-      vim.api.nvim_set_hl(0, ("ObsidianLocalGraphBranch%dDepth%d"):format(branch, depth), { default = true, link = target })
+    for direction, target in pairs({ Incoming = "Special", Outgoing = "String", Mutual = "Type" }) do
+      vim.api.nvim_set_hl(0, ("ObsidianLocalGraph%sDepth%d"):format(direction, depth), { default = true, link = target })
     end
   end
 end
@@ -189,8 +189,16 @@ local function build_graph(entries, root, notes_subdir)
   return graph
 end
 
+local function link_direction(graph, parent, child)
+  local outgoing = graph.outgoing[parent] and graph.outgoing[parent][child]
+  local incoming = graph.outgoing[child] and graph.outgoing[child][parent]
+  if outgoing and incoming then return 3, "↔ " end
+  if outgoing then return 2, "→ " end
+  return 1, "← "
+end
+
 local function select_graph(graph, center, opts, query)
-  local result = { order = {}, parent = {}, distance = {}, children = {}, branch_colors = {}, extra = {}, truncated = false }
+  local result = { order = {}, parent = {}, distance = {}, children = {}, extra = {}, truncated = false }
   if not graph.nodes[center] then return result end
   local queue = { center }
   result.distance[center] = 0
@@ -221,17 +229,6 @@ local function select_graph(graph, center, opts, query)
       end
     end
   end
-  -- Assign hues before filtering so a branch keeps its color when siblings disappear.
-  local branch_count = 0
-  for _, id in ipairs(queue) do
-    local parent = result.parent[id]
-    if parent == center then
-      branch_count = branch_count + 1
-      result.branch_colors[id] = (branch_count - 1) % 5 + 1
-    elseif parent then
-      result.branch_colors[id] = result.branch_colors[parent]
-    end
-  end
   local keep = { [center] = true }
   query = (query or ""):lower()
   for _, id in ipairs(queue) do
@@ -255,11 +252,22 @@ local function select_graph(graph, center, opts, query)
       end
     end
   end
+  -- Group the displayed siblings without changing shortest paths or limit selection.
+  for parent, children in pairs(result.children) do
+    table.sort(children, function(a, b)
+      local a_direction = link_direction(graph, parent, a)
+      local b_direction = link_direction(graph, parent, b)
+      if a_direction ~= b_direction then return a_direction < b_direction end
+      return graph.nodes[a].relative_path < graph.nodes[b].relative_path
+    end)
+  end
   -- Non-tree edges retain cycles and connections between branches without recursion.
   if opts.neighbor_links then
     for _, from in ipairs(result.order) do
       for to in pairs(graph.outgoing[from] or {}) do
-        if keep[to] and result.parent[to] ~= from and result.parent[from] ~= to then
+        local reciprocal = graph.outgoing[to] and graph.outgoing[to][from]
+        if keep[to] and result.parent[to] ~= from and result.parent[from] ~= to
+          and (not reciprocal or from < to) then
           result.extra[#result.extra + 1] = { from = from, to = to }
         end
       end
@@ -334,19 +342,20 @@ local function render()
       return parts
     end
     local function arrow(parent, child, highlight)
-      local outgoing = state.graph.outgoing[parent] and state.graph.outgoing[parent][child]
-      local incoming = state.graph.outgoing[child] and state.graph.outgoing[child][parent]
-      local text = outgoing and (incoming and "↔ " or "→ ") or "← "
+      local _, text = link_direction(state.graph, parent, child)
       return { text, highlight }
     end
+    local function direction_highlight(direction, depth)
+      return ("ObsidianLocalGraph%sDepth%d"):format(directions[direction], math.max(1, depth))
+    end
     add_parts(vim.list_extend({ { "● ", "ObsidianLocalGraphCenter" } }, label_parts(state.center, "ObsidianLocalGraphCenter")), state.center)
-    local function branch(parent, prefix)
-      local children = selected.children[parent] or {}
+    local function branch(parent, prefix, children)
+      children = children or selected.children[parent] or {}
       for index, id in ipairs(children) do
         local last = index == #children
-        local branch_color = selected.branch_colors[id]
         local depth = selected.distance[id]
-        local highlight = ("ObsidianLocalGraphBranch%dDepth%d"):format(branch_color, depth)
+        local direction = link_direction(state.graph, parent, id)
+        local highlight = direction_highlight(direction, depth)
         local parts = {
           { prefix, "ObsidianLocalGraphTree" }, { last and "└─ " or "├─ ", highlight }, arrow(parent, id, highlight),
         }
@@ -354,18 +363,36 @@ local function render()
         branch(id, prefix .. (last and "   " or "│  "))
       end
     end
-    branch(state.center, "")
+    local groups = { {}, {}, {} }
+    for _, id in ipairs(selected.children[state.center] or {}) do
+      local direction = link_direction(state.graph, state.center, id)
+      groups[direction][#groups[direction] + 1] = id
+    end
+    local titles = { "INCOMING ← · リンク元", "OUTGOING → · リンク先", "MUTUAL ↔ · 相互リンク" }
+    for direction, children in ipairs(groups) do
+      if #children > 0 then
+        add("")
+        add_parts({
+          { "  " .. titles[direction], direction_highlight(direction, 1) },
+          { "  (" .. #children .. ")", "ObsidianLocalGraphValue" },
+        })
+        branch(state.center, "  ", children)
+      end
+    end
     if #selected.order == 1 then add("  (No connected notes matching these filters)", nil, "Comment") end
     if #selected.extra > 0 then
       add("")
       add("NEIGHBOR LINKS · 枝同士のリンク / 循環", nil, "ObsidianLocalGraphHeading")
       for _, edge in ipairs(selected.extra) do
+        local direction = link_direction(state.graph, edge.from, edge.to)
         local function node_highlight(id)
           return id == state.center and "ObsidianLocalGraphCenter"
-            or ("ObsidianLocalGraphBranch%dDepth%d"):format(selected.branch_colors[id], selected.distance[id])
+            or direction_highlight(direction, selected.distance[id])
         end
         local parts = vim.list_extend({ { "  " } }, label_parts(edge.from, node_highlight(edge.from)))
-        parts[#parts + 1] = { " → ", node_highlight(edge.to) }
+        local link = arrow(edge.from, edge.to, node_highlight(edge.to))
+        link[1] = " " .. link[1]
+        parts[#parts + 1] = link
         add_parts(vim.list_extend(parts, label_parts(edge.to, node_highlight(edge.to))), edge.to)
       end
     end

@@ -10,7 +10,7 @@ vim.fn.mkdir(fixture .. "/notes/sub", "p")
 local notes = {
   ["notes/a.md"] = { "---", "id: root-id", "aliases: [Root alias]", "---", "# A", "[[b|B alias]] [[sub/c#Heading]] [[Missing]]", "[[dotted.name]] [[pic.png]]", "[D](sub/d.md#^block) [outside](../../outside.md)", "[web](https://example.com) `[[inline-code]]`", "```lua", "[[fenced]]", "```", "~~~", "[[tilde-fenced]]", "~~~", "<!-- [[comment]]", "[[multiline-comment]] -->" },
   ["notes/b.md"] = { "# B", "[[root-id]] [[sub/c]]" },
-  ["notes/sub/c.md"] = { "# C", "[A](../a.md) [[deep]]" },
+  ["notes/sub/c.md"] = { "# C", "[A](../a.md) [[deep]] [[b]]" },
   ["notes/sub/d.md"] = { "# D", "[[root-id]] [[b]]" },
   ["notes/deep.md"] = { "# Deep", "[[sub/d]]" },
   ["notes/ref.md"] = { "# Incoming", "[[Root alias#Heading]]" },
@@ -62,6 +62,15 @@ local selected = graph._select_graph(index, a, opts)
 assert(selected.distance[b] == 1 and selected.distance[ref] == 1, "both link directions are explored")
 assert(selected.distance[deep] == nil, "depth one does not visit second-degree notes")
 assert(#selected.extra > 0, "connections between branches retain non-tree edges")
+assert(vim.deep_equal(selected.children[a], { ref, missing, path("dotted.name"), b, c, d }),
+  "siblings group incoming, outgoing, and mutual links, with paths sorted within each group")
+local reciprocal_count = 0
+for _, edge in ipairs(selected.extra) do
+  if (edge.from == b and edge.to == c) or (edge.from == c and edge.to == b) then
+    reciprocal_count = reciprocal_count + 1
+  end
+end
+assert(reciprocal_count == 1, "reciprocal cross-branch links have a single edge")
 opts.depth = 2
 selected = graph._select_graph(index, a, opts)
 assert(selected.distance[deep] == 2 and #selected.order == 8, "depth two adds connected notes exactly once despite cycles")
@@ -104,6 +113,38 @@ assert(vim.api.nvim_win_get_buf(source_win) == source_buf, "opening the graph pr
 local function text() return table.concat(vim.api.nvim_buf_get_lines(state.buf, 0, -1, false), "\n") end
 assert(text():find("↔", 1, true) and text():find("NEIGHBOR LINKS", 1, true), "rendered graph includes reciprocal and cross edges")
 assert(text():find("Depth 2", 1, true), "command argument controls graph depth")
+local incoming_heading = text():find("INCOMING ←", 1, true)
+local outgoing_heading = text():find("OUTGOING →", 1, true)
+local mutual_heading = text():find("MUTUAL ↔", 1, true)
+assert(incoming_heading and outgoing_heading and mutual_heading
+  and incoming_heading < outgoing_heading and outgoing_heading < mutual_heading,
+  "direction headings make the groups visible")
+assert(text():find("[notes/b.md] ↔ C", 1, true), "reciprocal neighbor edges render with a bidirectional arrow")
+local marks = vim.api.nvim_buf_get_extmarks(state.buf, vim.api.nvim_create_namespace("ObsidianLocalGraph"), 0, -1, { details = true })
+local function has_highlight(id, token, group)
+  local lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
+  for line, value in ipairs(lines) do
+    if state.entries[line] == id then
+      local column = value:find(token, 1, true)
+      if column then
+        for _, mark in ipairs(marks) do
+          if mark[2] == line - 1 and mark[3] <= column - 1 and mark[4].end_col >= column - 1 + #token
+            and mark[4].hl_group == group then return true end
+        end
+      end
+      return false
+    end
+  end
+  return false
+end
+for _, item in ipairs({
+  { ref, "Incoming", "←", "ObsidianLocalGraphIncomingDepth1" },
+  { path("dotted.name"), "Dotted", "→", "ObsidianLocalGraphOutgoingDepth1" },
+  { b, "B", "↔", "ObsidianLocalGraphMutualDepth1" },
+}) do
+  assert(has_highlight(item[1], item[2], item[4]) and has_highlight(item[1], item[3], item[4]),
+    "node titles and arrows share their relationship's highlight: " .. item[4])
+end
 local function key(name)
   local callback = vim.fn.maparg(name, "n", false, true).callback
   assert(type(callback) == "function", "buffer mapping exists: " .. name)
