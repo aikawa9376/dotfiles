@@ -312,7 +312,9 @@ return {
               score_offset = 100,
             },
             cmdline = {
-              name = "[C]"
+              name = "[C]",
+              module = "blink_extension.completion.cmdline",
+              opts = { documentation_delay_ms = 150 },
             },
             ripgrep = {
               module = "blink-ripgrep",

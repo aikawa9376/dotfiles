@@ -108,6 +108,7 @@ return {
       },
       filetype = {
         ['blink-cmp-documentation'] = {
+          typography = { enabled = false },
           -- Blink already delays item updates; render each completed draw immediately.
           debounce = 0,
           win_options = {
