@@ -7,7 +7,8 @@ return {
         return string.format('%s', opts.id)
       end,
       indicator = {
-        icon = '',
+        -- Inactive buffers reserve one cell for the indicator too.
+        icon = ' ',
         style = 'icon'
       },
       name_formatter = function(buf)
@@ -48,8 +49,21 @@ return {
         fg = '#88C0D0',
         bg = 'none',
         underline = false,
-        italic = false
+        bold = false,
+        italic = false,
+      },
+      numbers_selected = { bold = false, italic = false },
+      duplicate = { italic = false },
+      duplicate_visible = { italic = false },
+      duplicate_selected = { italic = false },
+      pick = { bold = false, italic = false },
+      pick_visible = { bold = false, italic = false },
+      pick_selected = { bold = false, italic = false },
+      tab_selected = {
+        fg = '#88C0D0',
+        bg = 'none',
+        underline = false,
       },
     },
-  }
+  },
 }
