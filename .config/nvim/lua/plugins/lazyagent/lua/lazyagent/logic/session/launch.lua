@@ -302,9 +302,14 @@ function M.setup(deps)
             if success then
               state.sessions[agent_name].hidden = false
               state.sessions[agent_name].mode = nil
-              vim.defer_fn(function()
+              if acp_logic.is_acp_backend(backend_name) then
+                -- ACP joins report completion after the local view is restored.
                 notify_ready(state.sessions[agent_name].pane_id)
-              end, 50)
+              else
+                vim.defer_fn(function()
+                  notify_ready(state.sessions[agent_name].pane_id)
+                end, 50)
+              end
             else
               vim.notify("LazyAgent: failed to restore session pane", vim.log.levels.ERROR)
               notify_ready(state.sessions[agent_name].pane_id)
@@ -457,10 +462,17 @@ function M.setup(deps)
           end, delay_ms)
         end
 
-        vim.defer_fn(function()
+        local function finish_launch()
           util.fire_event("SessionStarted", { agent_name = agent_name, provider_id = provider_id, pane_id = pane_id })
           notify_ready(pane_id)
-        end, 200)
+        end
+        if acp_logic.is_acp_backend(backend_name) then
+          -- Local input can open as soon as the pane exists; the ACP backend
+          -- queues submissions until the provider connection becomes ready.
+          finish_launch()
+        else
+          vim.defer_fn(finish_launch, 200)
+        end
       end,
     }
 

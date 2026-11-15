@@ -149,6 +149,7 @@ function M.run()
     }, false, function(pane_id, session_key)
       ready[session_key] = pane_id
     end)
+    assert_equal(vim.tbl_count(ready), index, "ACP input readiness follows pane creation without a startup timer")
   end
   assert(vim.wait(1000, function()
     return vim.tbl_count(ready) == 2
@@ -211,6 +212,7 @@ function M.run()
   }, false, function(_, session_key)
     hidden_key = session_key
   end)
+  assert(hidden_key ~= nil, "hidden ACP launch does not add a startup timer")
   assert(vim.wait(1000, function()
     return hidden_key ~= nil
   end, 10), "hidden ACP session should become ready")
@@ -226,6 +228,7 @@ function M.run()
   }, true, function(_, session_key)
     revealed_key = session_key
   end)
+  assert_equal(revealed_key, hidden_key, "ACP input readiness follows successful join without a restore timer")
   assert(vim.wait(1000, function()
     return revealed_key ~= nil
   end, 10), "explicitly visible reuse should reveal a hidden ACP session")
@@ -242,6 +245,7 @@ function M.run()
   launch.ensure_session("Legacy", { acp = false }, false, function()
     legacy_ready = true
   end)
+  assert_equal(legacy_ready, false, "legacy terminal startup retains its settling delay")
   assert(vim.wait(1000, function()
     return legacy_ready
   end, 10), "legacy session launch should become ready")
