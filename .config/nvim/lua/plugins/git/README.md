@@ -20,6 +20,36 @@ Standalone Neovim Git UI, loaded by `plugins.git`. It owns its status, log,
 object, blame, and commit buffers directly. Flog is available lazily through
 the native Git backend.
 
+## Dedicated Git application
+
+The dotfiles Zsh alias `Git` starts a dedicated Neovim profile:
+
+```sh
+Git                    # Current working tree
+Git /path/to/repository # Open another repository
+# Equivalent without the alias:
+nvim --cmd 'let g:git_app = 1'
+```
+
+It opens Status in the initial window, with no spare editor tab or bufferline.
+The profile keeps Git views, diff/graph tools, pickers, syntax and Markdown
+rendering, while omitting the editor's LSP, session autosave, automatic project
+switching, bufferline and window labels. It uses a small native statusline.
+
+Status `q` / `<C-c>` exits Neovim. Closing or deleting the root Status window
+or buffer also ends the application. Exit uses `:confirm qall`, preserving the
+normal unsaved-change confirmation; cancelling a close restores Status.
+Other Git panels retain their existing keys and close behavior.
+
+Files opened from Status or through `:edit` open in inspection tabs. Their `q`
+returns to Status, and modified inspection tabs must be saved before closing.
+File inspections show absolute line numbers and use Tree-sitter highlighting
+where available, with standard syntax highlighting as a fallback.
+Closing a native Git view back to its empty inspection buffer also returns to
+Status. Commit/rebase editor buffers retain Git's normal write/close protocol.
+Use ordinary `nvim` for extended file editing. The profile accepts an optional
+repository directory, including paths containing spaces, rather than file args.
+
 ## Panel keys
 
 Normal panel keys use the selected row, file, hunk, or Visual selection as their

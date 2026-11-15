@@ -83,6 +83,7 @@ abbr -S --quiet tp='tspin'
 # -------------------------------------
 # git
 # -------------------------------------
+alias Git='nvim --cmd "let g:git_app = 1"'
 abbr -S --quiet ggs='git status'
 abbr -S --quiet gga='git add -u'
 abbr -S --quiet ggas='git add -A'

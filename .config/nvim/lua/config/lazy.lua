@@ -15,7 +15,7 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 require("lazy").setup({
-  spec = {
+  spec = (vim.g.git_app == 1 or vim.g.git_app == true) and require('config.git_app').plugins() or {
     { import = "plugins.nightfox" },
     { import = "plugins.project" },
     { import = "plugins.conform"},

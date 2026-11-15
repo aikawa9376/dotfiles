@@ -882,6 +882,8 @@ local function status_edit_command_at_cursor(bufnr)
 end
 
 local function target_window_or_split(status_win)
+  local app_target, created = require('git.features.application').file_window(status_win)
+  if app_target then return app_target, created end
   local target_win = preferred_target_window(status_win)
   if target_win and vim.api.nvim_win_is_valid(target_win) and target_win ~= status_win then
     return target_win, false
@@ -945,7 +947,9 @@ local function open_entry_from_status(bufnr, close_status)
     return
   end
 
-  if close_status then pcall(vim.api.nvim_win_close, status_win, false) end
+  if close_status and not require('git.features.application').active() then
+    pcall(vim.api.nvim_win_close, status_win, false)
+  end
   if vim.api.nvim_win_is_valid(target_win) then
     vim.api.nvim_set_current_win(target_win)
   end
@@ -3530,6 +3534,9 @@ function M.open(opts)
     vim.notify('Not in a Git repository', vim.log.levels.WARN)
     return nil
   end
+
+  local home = require('git.features.application').focus_status(work_tree)
+  if home then return home end
 
   local bufnr
   for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
