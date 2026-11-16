@@ -13,6 +13,17 @@ nvim --headless --clean -u NONE -l tests/run.lua
 The suite count is intentionally not fixed. Every new suite must be registered in `tests/run.lua`
 so this command remains the complete contract run.
 
+For the installed Inkstone/Noice integration, run from the dotfiles root:
+
+```sh
+nvim --headless --clean -u NONE -l .config/nvim/tests/noice_acp_layout.lua
+```
+
+This separate test uses the installed renderers, Nui and Markdown parser in an
+isolated attached UI. It keeps a real Noice progress notification visible through
+twelve updates and dismissal, checking ACP decoration IDs, render count, source
+tick, wrapped height, cursor and viewport. It never connects to the active editor.
+
 `tests/acp/fake_agent.lua` runs as a real child process over stdio. The suite intentionally exercises
 fragmented and batched JSON-RPC messages, unknown updates, host requests, capability negotiation,
 request timeout/cancellation, session lifecycle methods, and process teardown without requiring a

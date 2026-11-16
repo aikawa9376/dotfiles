@@ -85,6 +85,7 @@ local suites = {
   "tests.acp.view_diff_spec",
   "tests.acp.view_viewport_spec",
   "tests.acp.markdown_rendering_spec",
+  "tests.acp.renderer_layout_spec",
   "tests.acp.markdown_node_spec",
   "tests.acp.transcript_preview_spec",
   "tests.acp.highlighter_spec",

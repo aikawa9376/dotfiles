@@ -40,8 +40,12 @@ local function is_lazyagent_acp_buffer(buf)
 end
 
 function M.enable_async_view_parse()
-  -- Inkstone already guards asynchronous parses for every buffer.
-  if markdown_renderer.name() == "inkstone" then return end
+  -- Inkstone already guards asynchronous parses for every buffer. Its global
+  -- window notifications need an ACP-local geometry check instead.
+  if markdown_renderer.name() == "inkstone" then
+    require("lazyagent.acp.renderer_layout").install(markdown_renderer.require("core.ui"), markdown_renderer.require("state").on)
+    return
+  end
   if M.async_view_parse_enabled or vim.fn.has("nvim-0.11") == 0 then return end
   local View = markdown_renderer.require("request.view")
   local Context = markdown_renderer.require("request.context")
