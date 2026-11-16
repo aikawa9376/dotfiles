@@ -28,6 +28,30 @@ end
 -- ────────────────────────────────────────────────
 
 M.list = {
+  {
+    name = "update_timeline",
+    description = "Record your work in the LazyAgent Timeline tab. At the start of substantial work and when progress changes, send the COMPLETE current task tree. Keep stable IDs, use parent_id for subtasks and positive weights for relative size among siblings. Completed tasks count fully; other parents derive progress from their children. This updates only your own ACP thread and persists across restarts. Ordinary ACP plans are the fallback when no timeline is recorded.",
+    inputSchema = {
+      type = "object",
+      properties = {
+        title = { type = "string", maxLength = 500 },
+        tasks = { type = "array", maxItems = 200, items = {
+          type = "object",
+          properties = {
+            id = { type = "string", maxLength = 100 }, parent_id = { type = "string", maxLength = 100 },
+            title = { type = "string", maxLength = 500 }, weight = { type = "number", exclusiveMinimum = 0, maximum = 1000000 },
+            status = { type = "string", enum = { "pending", "in_progress", "completed", "blocked", "failed", "cancelled" } },
+            note = { type = "string", maxLength = 2000 },
+          }, required = { "id", "title", "status" },
+        } },
+      }, required = { "title", "tasks" },
+    },
+    handler = function(params, context)
+      local result, err = require("lazyagent.acp.task_timeline").report(params, context, state)
+      if not result then return nil, { code = -32602, message = type(err) == "table" and err.message or tostring(err) } end
+      return result
+    end,
+  },
   -- LazyAgent Teams orchestration
   {
     name = "team_delegate",

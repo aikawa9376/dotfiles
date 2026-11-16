@@ -158,6 +158,23 @@ function M.run()
   assert_equal(stale_review, nil, "stale workflow confirmation is rejected under the manifest lock")
   assert_equal(stale_review_err.code, "stale_cockpit", "workflow version guard")
 
+  local before_timeline = assert(store:get(THREAD_ID))
+  assert(store:update(THREAD_ID, { metadata = { cockpit_timeline = { revision = 1, tasks = { { id = "old" } } } } }, {
+    expected_timeline_revision = 0, preserve_updated_at = true, replace_metadata_fields = { "cockpit_timeline" },
+  }))
+  local stale_timeline, stale_timeline_err = store:update(THREAD_ID, { metadata = { cockpit_timeline = { revision = 1 } } }, {
+    expected_timeline_revision = 0,
+  })
+  assert_equal(stale_timeline, nil, "stale timeline cannot overwrite newer progress")
+  assert_equal(stale_timeline_err.code, "stale_timeline", "timeline revision guard is checked under lock")
+  assert(store:update(THREAD_ID, { metadata = { cockpit_timeline = { revision = 2, tasks = {} } } }, {
+    expected_timeline_revision = 1, preserve_updated_at = true, replace_metadata_fields = { "cockpit_timeline" },
+  }))
+  local after_timeline = assert(store:get(THREAD_ID))
+  assert_equal(after_timeline.metadata.cockpit_timeline.tasks, {}, "removed tasks do not reappear after metadata merging")
+  assert_equal(after_timeline.updated_at, before_timeline.updated_at, "progress preserves activity timestamps")
+  assert_equal(after_timeline.unread, before_timeline.unread, "progress does not acknowledge the transcript")
+
   local deleted, deleted_record = store:delete(THREAD_ID, { expected_process_id = vim.NIL })
   assert_equal(deleted, true, "delete result")
   assert_equal(deleted_record.thread_id, THREAD_ID, "deleted record")

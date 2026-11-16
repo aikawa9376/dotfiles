@@ -469,6 +469,10 @@ function Store:update(thread_id, changes, opts)
     then
       return nil, { code = "stale_test" }
     end
+    if opts.expected_timeline_revision ~= nil
+      and ((current.metadata.cockpit_timeline or {}).revision or 0) ~= opts.expected_timeline_revision then
+      return nil, { code = "stale_timeline", message = "Timeline changed; read it again before updating" }
+    end
     if opts.expected_completion_id ~= nil
       and ((current.metadata.cockpit_completion or {}).id or vim.NIL) ~= opts.expected_completion_id
     then

@@ -1926,6 +1926,21 @@ local function create_backend(default_view)
     return backend.update_thread(thread_id, { draft = tostring(draft or "") }, { skip_unchanged = true })
   end
 
+  function backend.update_timeline(thread_id, params)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then return nil, err end
+    local previous = (thread.metadata or {}).cockpit_timeline
+    local timeline, validation_err = require("lazyagent.acp.task_timeline").validate(params, thread_id, previous)
+    if not timeline then return nil, validation_err end
+    local updated, update_err = backend.update_thread(thread_id, { metadata = { cockpit_timeline = timeline } }, {
+      preserve_updated_at = true, expected_timeline_revision = (previous or {}).revision or 0,
+      replace_metadata_fields = { "cockpit_timeline" },
+    })
+    if not updated then return nil, update_err end
+    util.fire_event("TimelineChanged", { thread_id = thread_id })
+    return { revision = timeline.revision, task_count = #timeline.tasks }
+  end
+
   function backend.mark_thread_read(thread_id, opts)
     local thread, err = thread_store:get(thread_id)
     if not thread then return nil, err end
@@ -1956,6 +1971,24 @@ local function create_backend(default_view)
   function backend.get_cockpit_activity(pane_id)
     local session = get_session(pane_id)
     return session and require("lazyagent.acp.cockpit_activity").snapshot(session) or nil
+  end
+
+  function backend.get_cockpit_details(pane_id)
+    local session = get_session(pane_id)
+    if not session then return nil end
+    return require("lazyagent.acp.cockpit_insights").snapshot({
+      acp_goal = session.goal, acp_plan = session.current_plan,
+      acp_subagents = session.subagents, acp_async_tasks = session.async_tasks,
+      acp_usage_stats = session.usage_stats,
+    })
+  end
+
+  function backend.get_account_usage_source(pane_id)
+    local session = get_session(pane_id)
+    if not session then return nil end
+    local command = (session.agent_cfg or {}).cmd
+    return { provider = tostring(session.agent_name or "") .. " " .. (type(command) == "string" and command or ""),
+      executable = type(command) == "string" and command:match("^%S+$") or nil, cwd = session.cwd, env = session.env }
   end
 
   function backend.get_runtime_snapshot(pane_id, opts)

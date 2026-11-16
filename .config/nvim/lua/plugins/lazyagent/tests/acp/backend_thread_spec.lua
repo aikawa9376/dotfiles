@@ -166,6 +166,17 @@ function M.run()
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_activity.signature, activity.signature,
     "runtime snapshot shares compact activity projection")
   assert_equal(activity.tools[1].rawOutput, nil, "compact activity omits raw tool output")
+  local insights = backend.get_cockpit_details(pane_id)
+  assert(insights.available and insights.plan and insights.usage, "selected-thread insights expose plan and usage without timelines")
+  local timeline_result = assert(backend.update_timeline(runtime.acp_thread_id, {
+    title = "Fixture progress", tasks = { { id = "one", title = "Record progress", status = "completed", weight = 2 } },
+  }))
+  assert_equal(timeline_result.revision, 1, "backend persists first timeline revision")
+  local timeline_thread = assert(store:get(runtime.acp_thread_id))
+  assert_equal(timeline_thread.metadata.cockpit_timeline.thread_id, runtime.acp_thread_id, "saved timeline belongs to this thread")
+  assert_equal(timeline_thread.title, "Manual thread title", "timeline does not rename the conversation")
+  local source = backend.get_account_usage_source(pane_id)
+  assert(source.cwd == root and source.provider:find("ThreadFixture", 1, true), "usage source retains launch context")
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_pending_permission.request_id, pending.request_id,
     "runtime exposes the live request identity")
   assert_equal(backend.respond_permission(pane_id, "allow-once", "project", pending.request_id .. ":old"), nil,

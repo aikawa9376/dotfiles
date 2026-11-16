@@ -2,6 +2,20 @@ local M = {}
 local Cockpit = require("lazyagent.acp.cockpit")
 local Review = require("lazyagent.acp.cockpit_review")
 local Activity = require("lazyagent.acp.cockpit_activity")
+local Insights = require("lazyagent.acp.cockpit_insights")
+
+M.sections = { "overview", "timeline", "usage", "changes", "tests", "queue", "since" }
+local labels = { overview = "Overview", timeline = "Timeline", usage = "Usage", changes = "Changes",
+  tests = "Tests", queue = "Queue", since = "Since check" }
+
+function M.tabs(section)
+  local tabs = {}
+  for _, key in ipairs(M.sections) do
+    local label = "[" .. labels[key] .. "]"
+    tabs[#tabs + 1] = key == section and ("**" .. label .. "**") or label
+  end
+  return table.concat(tabs, " ") .. " · <Tab>/<S-Tab> switch · K latest response"
+end
 
 local function text(value)
   if value == vim.NIL then return "" end
@@ -14,11 +28,20 @@ function M.render(thread, runtime, section, opts)
   runtime, opts = runtime or {}, opts or {}
   local lines = {
     "# " .. tostring(thread.provider_id or "Agent") .. " · " .. text(Cockpit.prompt_title(thread) or thread.thread_id),
-    "", "[Overview] [Changes] [Tests] [Queue] [Since check] · <Tab> next · K latest response",
+    "", M.tabs(section or "overview"),
     "C changes · gC compare since check · Q queue · A permission · t test · w review tracking · V since check · u mark checked", "",
   }
   local function add(line) lines[#lines + 1] = line end
-  if section == "since" then
+  if section == "timeline" or section == "usage" then
+    local data = opts.insights or Insights.snapshot(supplied_runtime)
+    local timeline = (thread.metadata or {}).cockpit_timeline
+    if section == "timeline" and timeline and timeline.thread_id == thread.thread_id then
+      data = Insights.snapshot({ acp_goal = timeline.title, acp_plan = timeline.tasks })
+      data.recorded_at = timeline.updated_at
+      data.weighted = true
+    end
+    vim.list_extend(lines, Insights[section](data, opts.width, opts.allowance))
+  elseif section == "since" then
     local since = Cockpit.since(thread, opts)
     add("## Since last check")
     if not since.established then

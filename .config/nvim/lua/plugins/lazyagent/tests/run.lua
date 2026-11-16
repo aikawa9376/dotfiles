@@ -1,5 +1,5 @@
 local source = debug.getinfo(1, "S").source:gsub("^@", "")
-local root = vim.fs.dirname(vim.fs.dirname(source))
+local root = vim.fn.fnamemodify(vim.fs.dirname(vim.fs.dirname(source)), ":p")
 
 vim.opt.runtimepath:prepend(root)
 package.path = table.concat({
@@ -59,6 +59,8 @@ local suites = {
   "tests.acp.cockpit_query_spec",
   "tests.acp.cockpit_views_spec",
   "tests.acp.cockpit_activity_spec",
+  "tests.acp.cockpit_insights_spec",
+  "tests.acp.account_usage_spec",
   "tests.acp.cockpit_attention_spec",
   "tests.acp.cockpit_review_spec",
   "tests.acp.cockpit_review_backend_spec",

@@ -81,6 +81,9 @@ local function dispatcher(rpc, cb, context)
       protocolVersion = MCP_VERSION,
       capabilities = SERVER_CAPABILITIES,
       serverInfo = SERVER_INFO,
+      instructions = context and context.headers and context.headers["x-lazyagent-thread-id"]
+        and "For substantial work, maintain the Timeline with update_timeline: record the full weighted task tree at the start and when progress changes. Keep IDs stable, split large tasks with parent_id, and mark completed or blocked work explicitly. Use normal ACP plans when this tool is unavailable."
+        or nil,
     }))
     return
   end

@@ -941,6 +941,7 @@ function M.setup(deps)
     local preview_enabled = true
     local preview_mode = "summary"
     local detail_section = "overview"
+    local account_usage = require("lazyagent.acp.account_usage").new()
     local preview_layout = require("lazyagent.acp.cockpit").normalize_preview_layout(
       ((state.opts or {}).acp or {}).cockpit_preview_layout or (state.opts or {}).cockpit_preview_layout
     )
@@ -982,7 +983,7 @@ function M.setup(deps)
         vim.bo[preview_bufnr].swapfile = false
         vim.bo[preview_bufnr].filetype = "lazyagent_acp"
         preview_renderer = require("lazyagent.acp.transcript_preview").attach(preview_bufnr)
-        for _, key in ipairs({ "K", "<Tab>", "C", "gC", "g/", "Q", "A", "t", "m", "Z", "V", "u", "w", "S", "F", "gF" }) do
+        for _, key in ipairs({ "K", "<Tab>", "<S-Tab>", "gT", "gU", "C", "gC", "g/", "Q", "A", "t", "m", "Z", "V", "u", "w", "S", "F", "gF" }) do
           vim.keymap.set("n", key, function()
             if not vim.api.nvim_buf_is_valid(bufnr) then return end
             local mapping = vim.api.nvim_buf_call(bufnr, function() return vim.fn.maparg(key, "n", false, true) end)
@@ -1240,9 +1241,22 @@ function M.setup(deps)
           preview_thread_id, preview_signature = thread.thread_id, nil
           local _, current_thread = thread_backend(thread.thread_id)
           thread = current_thread or thread
+          local insights, allowance
+          if detail_section == "timeline" or detail_section == "usage" then
+            local key, session = local_session_key(thread.thread_id)
+            local active_backend = key and state.backends[session.backend]
+            if active_backend and type(active_backend.get_cockpit_details) == "function" then
+              insights = active_backend.get_cockpit_details(session.pane_id)
+            end
+            if detail_section == "usage" and active_backend and type(active_backend.get_account_usage_source) == "function" then
+              allowance = account_usage.get(active_backend.get_account_usage_source(session.pane_id))
+            end
+          end
           lines = require("lazyagent.acp.cockpit_details").render(thread, runtimes[thread.thread_id], detail_section, {
             owner_pid = vim.fn.getpid(), owner_instance_id = state.editor_instance_id,
             snoozed = snoozed, fingerprints = fingerprints, fingerprint_pending = fingerprint_pending,
+            insights = insights, width = vim.api.nvim_win_get_width(preview_winid),
+            allowance = allowance,
           })
           vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· " .. detail_section .. " "
         else
@@ -1566,16 +1580,27 @@ function M.setup(deps)
       if preview_mode == "details" then invalidate_fingerprint(selected_workspace()) end
       refresh()
     end, { buffer = bufnr, desc = "Toggle thread details" })
-    vim.keymap.set("n", "<Tab>", function()
-      local sections = { "overview", "changes", "tests", "queue", "since" }
-      local index = 1
-      for i, section in ipairs(sections) do if section == detail_section then index = i end end
-      detail_section = sections[index % #sections + 1]
+    local function show_detail(section)
+      detail_section = section
       cancel_preview_delay()
       preview_enabled, preview_mode = true, "details"
       if detail_section == "tests" then invalidate_fingerprint(selected_workspace()) end
       refresh()
-    end, { buffer = bufnr, desc = "Next thread detail section" })
+    end
+    local function cycle_detail(direction)
+      local sections = require("lazyagent.acp.cockpit_details").sections
+      local index = 1
+      for i, section in ipairs(sections) do if section == detail_section then index = i end end
+      show_detail(sections[(index - 1 + direction) % #sections + 1])
+    end
+    vim.keymap.set("n", "<Tab>", function() cycle_detail(1) end,
+      { buffer = bufnr, desc = "Next thread detail section" })
+    vim.keymap.set("n", "<S-Tab>", function() cycle_detail(-1) end,
+      { buffer = bufnr, desc = "Previous thread detail section" })
+    vim.keymap.set("n", "gT", function() show_detail("timeline") end,
+      { buffer = bufnr, desc = "Thread timeline tab" })
+    vim.keymap.set("n", "gU", function() show_detail("usage") end,
+      { buffer = bufnr, desc = "Thread usage tab" })
     vim.keymap.set("n", "C", function()
       local id = selected_thread_id()
       if id then module.show_thread_changes(id) end
@@ -2029,6 +2054,9 @@ function M.setup(deps)
         { key = "m", description = "Acknowledge completed response" },
         { key = "K", description = "Toggle thread details" },
         { key = "<Tab>", description = "Next detail section" },
+        { key = "<S-Tab>", description = "Previous detail section" },
+        { key = "gT", description = "Timeline tab" },
+        { key = "gU", description = "Usage tab" },
         { key = "C", description = "Review selected thread changes" },
         { key = "gC", description = "Compare recorded code since last check" },
         { key = "Q", description = "Manage selected thread queue" },
@@ -2086,7 +2114,7 @@ function M.setup(deps)
     })
     vim.api.nvim_create_autocmd("User", {
       group = preview_augroup,
-      pattern = "LazyAgentCockpitRead",
+      pattern = { "LazyAgentCockpitRead", "LazyAgentTimelineChanged" },
       callback = function() pending_refresh = true end,
     })
     vim.api.nvim_create_autocmd("BufWritePost", {
@@ -2142,6 +2170,7 @@ function M.setup(deps)
       buffer = bufnr,
       once = true,
       callback = function()
+        account_usage.close()
         for job in pairs(review_jobs) do pcall(job.kill, job, 15) end
         for _, check in pairs(fingerprint_checks) do if check.job then pcall(check.job.kill, check.job, 15) end end
         cancel_preview_delay()
