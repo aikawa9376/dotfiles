@@ -770,7 +770,16 @@ function M.run()
   cancel_select_callback = nil
   assert(vim.wait(5000, function() return not backend.is_busy(cancel_pane) end, 10),
     "cancelled prompt should settle before starting another turn")
+  local previous_cancel_status = state.sessions.CancelFixture
+  state.sessions.CancelFixture = { backend = "buffer_acp", pane_id = cancel_pane, agent_status = "thinking" }
+  agentmux.sync = function() return true end
+  assert(backend.send_keys(cancel_pane, { "C-c" }))
+  assert_equal(state.sessions.CancelFixture.agent_status, "idle", "cancel clears a lingering thinking status")
+  state.sessions.CancelFixture = previous_cancel_status
+  agentmux.sync = previous_agentmux_sync
   assert(backend.paste_and_submit(cancel_pane, "another cancelled turn", { "C-m" }, {}))
+  assert(not backend.capture_pane_sync(cancel_pane):find("Prompt cancelled before send", 1, true),
+    "cancelling a settled turn must not discard the next prompt")
   assert(vim.wait(3000, function()
     return backend.get_pending_permission(cancel_pane) ~= nil and cancel_select_callback ~= nil
   end, 10), "new turn should expose a fresh permission UI")

@@ -755,11 +755,13 @@ local function create_backend(default_view)
     end
 
     local runtime = state.sessions and state.sessions[session.agent_name]
-    local active = session.busy == true
-      or session.preparing_prompt == true
+    local prompt_active = session.busy == true or session.preparing_prompt == true
+    local active = prompt_active
       or session.pending_brain_turn ~= nil
       or (runtime and runtime.agent_status == "thinking")
-    session.cancel_requested = active == true
+    -- Only an in-flight prompt has a completion callback to consume this flag.
+    -- A lingering status or pending bookkeeping must not cancel the next prompt.
+    session.cancel_requested = prompt_active
 
     if active then
       pcall(function()
