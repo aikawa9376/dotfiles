@@ -3,7 +3,8 @@ hl.window_rule({ name = "alacritty-workspace", match = { class = "[Aa]lacritty" 
 hl.window_rule({ name = "luakit-workspace", match = { class = "[Ll]uakit" }, workspace = "2" })
 hl.window_rule({ name = "remmina-workspace", match = { class = "org.remmina.Remmina|Remmina" }, workspace = "3" })
 
-hl.window_rule({ name = "tsumugi-float", match = { class = "tsumugi", initial_title = "Tsumugi.*" }, float = true, center = true, size = { "monitor_w * 0.8", "monitor_h * 0.8" } })
+hl.window_rule({ name = "tsumugi-float", match = { class = "tsumugi" }, float = true, center = true })
+hl.window_rule({ name = "tsumugi-main-size", match = { class = "tsumugi", initial_title = "Tsumugi.*" }, size = { "monitor_w * 0.8", "monitor_h * 0.8" } })
 hl.window_rule({ name = "insync-float", match = { class = "[Ii]nsync" }, float = true, center = true, size = { 640, 450 } })
 hl.window_rule({ name = "copyq-float", match = { class = "([Cc]opyq|com\\.github\\.hluk\\.copyq)" }, float = true, center = true, size = { 725, 837 } })
 hl.window_rule({ name = "feh-float", match = { class = "[Ff]eh" }, float = true, center = true, size = { 600, 400 } })

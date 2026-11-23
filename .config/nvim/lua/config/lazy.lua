@@ -61,7 +61,7 @@ require("lazy").setup({
     { import = "plugins.obsidian-extension" },
     { import = "plugins.time-machine" },
     { import = "plugins.grug-far" },
-    { import = "plugins.junkfile" },
+    -- { import = "plugins.junkfile" },
     { import = "plugins.guess-indent" },
     -- { import = "plugins.dbee" },
     { import = "plugins.connector" },
