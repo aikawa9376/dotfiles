@@ -18,7 +18,7 @@ end
 -- Applications and focus.
 hl.bind("SUPER + Return", hl.dsp.exec_cmd(terminal))
 hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd("env WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/local/bin/rust-ai-assistant --show"))
-hl.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("env WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/local/bin/tsumugi"))
+hl.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("env GDK_BACKEND=x11 WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/local/bin/tsumugi"))
 hl.bind("SUPER + Q", hl.dsp.window.close())
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd(switcher))
 hl.bind("ALT + V", hl.dsp.exec_cmd(launcher))
