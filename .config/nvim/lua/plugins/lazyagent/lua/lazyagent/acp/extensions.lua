@@ -1,5 +1,32 @@
 local M = {}
 
+function M.air_meta(meta)
+  local jetbrains = type(meta) == "table" and meta.jetbrains or nil
+  local air = type(jetbrains) == "table" and jetbrains.air or nil
+  if type(air) == "table" and (tonumber(air.version) or 0) >= 1 then return air end
+end
+
+function M.meta_value(meta, key)
+  if type(meta) ~= "table" then return nil end
+  if meta[key] ~= nil then return meta[key] end
+  local air = M.air_meta(meta)
+  return air and air[key]
+end
+
+function M.auth_state(method, params)
+  if type(params) ~= "table" then return nil end
+  if method == "auth/status_update" then
+    local value = params.state
+    if value == "authenticated" or value == "unauthenticated" or value == "unknown" then return value end
+  elseif method == "_auth/status_update" then
+    local status = params.authStatus
+    if type(status) == "table" and type(status.kind) == "string" then
+      if status.kind == "unknown" then return "unknown" end
+      return status.kind == "none" and "unauthenticated" or "authenticated"
+    end
+  end
+end
+
 local function cursor_property(question)
   local choices = {}
   for _, option in ipairs(type(question.options) == "table" and question.options or {}) do

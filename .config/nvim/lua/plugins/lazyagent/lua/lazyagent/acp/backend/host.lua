@@ -345,7 +345,7 @@ function M.setup(deps)
     session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
     vim.list_extend(session.permission_rules, PermissionStore.rules(session, store_opts))
     local tool = merge_tool_update(session, scoped_tool_call(session, params.sessionId, params.toolCall or {}))
-    local permission_presentation = type(params._meta) == "table" and params._meta.permission or nil
+    local permission_presentation = Extensions.meta_value(params._meta, "permission")
     permission_presentation = type(permission_presentation) == "table" and permission_presentation or {}
     local permission_title = tostring(permission_presentation.title or tool.title or tool.toolCallId or "Tool permission")
     local tool_path = (extract_tool_paths(tool) or {})[1]
@@ -1020,19 +1020,17 @@ function M.setup(deps)
     end
 
     if kind == "session_info_update" then
+      local goal = Extensions.meta_value(update._meta, "goal")
+      local goal_owner = source_subagent or session
+      if type(goal) == "table" then goal_owner.goal = vim.deepcopy(goal) end
+      if goal == vim.NIL then goal_owner.goal = nil end
       if source_subagent then
         source_subagent.session_info = vim.tbl_deep_extend("force", source_subagent.session_info or {}, vim.deepcopy(update))
-        if type(update._meta) == "table" and update._meta.goal ~= nil then
-          source_subagent.goal = update._meta.goal == vim.NIL and nil or vim.deepcopy(update._meta.goal)
-        end
         record_session_failure(session, update, source_subagent)
         sync_runtime_session(session)
         return
       end
       update_session_info(session, update)
-      if type(update._meta) == "table" and update._meta.goal ~= nil then
-        session.goal = update._meta.goal == vim.NIL and nil or vim.deepcopy(update._meta.goal)
-      end
       record_session_failure(session, update)
       sync_runtime_session(session)
       local title_source = session.thread_record
@@ -1190,6 +1188,10 @@ function M.setup(deps)
   local function on_client_exit(session, code, signal, stderr_text)
     UiQueue.cancel(session)
     release_all_terminals(session)
+    if session.account_usage_probe then
+      session.account_usage_probe.close()
+      session.account_usage_probe, session.account_usage = nil, nil
+    end
     if session and session.activation_hydrator then
       session.activation_hydrator:discard("client_exit")
       session.activation_hydrator = nil
@@ -1240,7 +1242,7 @@ function M.setup(deps)
         end
       end
 
-      if result.nextCursor and result.nextCursor ~= "" then
+      if type(result.nextCursor) == "string" and result.nextCursor ~= "" then
         local next_params = vim.tbl_extend("force", params or {}, {
           cursor = result.nextCursor,
         })
@@ -1630,6 +1632,24 @@ function M.setup(deps)
       return false
     end
     handlers.extension_notification = function(method, params)
+      if method == "auth/status_update" or method == "_auth/status_update" then
+        local auth_state = Extensions.auth_state(method, params)
+        if method == "auth/status_update" then
+          session.auth_status_standard = auth_state ~= nil or session.auth_status_standard
+        elseif session.auth_status_standard then
+          return true
+        end
+        if auth_state and auth_state ~= session.auth_state then
+          if session.account_usage_probe then
+            session.account_usage_probe.close()
+            session.account_usage_probe, session.account_usage = nil, nil
+          end
+          session.auth_state = auth_state
+          sync_runtime_session(session)
+          if type(opts.on_auth_changed) == "function" then opts.on_auth_changed(session) end
+        end
+        return true
+      end
       local update = Extensions.cursor_notification(method, params)
       if not update then return false end
       on_client_update(session, { sessionId = session.session_id, update = update })
@@ -1655,6 +1675,7 @@ function M.setup(deps)
       command = session.command,
       cwd = session.cwd,
       additional_directories = session.additional_directories,
+      system_prompt_append = session.system_prompt_append,
       env = session.env,
       request_timeout_ms = session.request_timeout_ms,
       mcp_servers = session.mcp_servers,
@@ -1873,6 +1894,7 @@ function M.setup(deps)
       end
       append_block(session, "System", message)
       apply_initial_session_config(session, function()
+        if type(opts.on_ready) == "function" then opts.on_ready(session) end
         local on_ready_actions = session.on_ready_actions or {}
         session.on_ready_actions = {}
         for _, callback in ipairs(on_ready_actions) do

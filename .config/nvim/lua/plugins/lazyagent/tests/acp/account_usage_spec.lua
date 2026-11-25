@@ -19,7 +19,8 @@ function M.run()
   local claude = probe("claude")
   entry = claude.get({ provider = "Claude", cwd = "/tmp" })
   assert(vim.wait(2000, function() return entry.status == "ready" end, 10), "Claude control probe completes")
-  assert(entry.windows[2].label == "Week · Fable" and entry.windows[2].used == 4, "model-specific weekly allowance")
+  assert(entry.windows[3].label == "Week · Fable" and entry.windows[3].used == 4, "model-specific weekly allowance")
+  assert(Usage.footer(entry) == "Session 56% left ↻11/20 10:00Z / Week 80% left", "compact footer uses unscoped limits")
   claude.close()
   local hanging = probe("hang", { timeout = 60 })
   entry = hanging.get(input)
@@ -44,15 +45,17 @@ function M.run()
     { kind = "weekly_scoped", percent = 0, scope = { model = vim.NIL, surface = { display_name = "Code" } } },
   } } })
   assert(parsed[1].label == "Week · Code", "a null model scope does not hide the surface scope")
+  assert(Usage.parse("claude", { rate_limits_available = true, rate_limits = vim.NIL }) == nil,
+    "an available feature with no reported windows does not imply a full allowance")
   local mode = "codex"
-  local retry = Usage.new({ ttl = 0, timeout = 100, command = function()
+  local retry = Usage.new({ refresh_interval = 0, timeout = 100, command = function()
     return { vim.v.progpath, "--headless", "--clean", "-u", "NONE", "-l", fixture, mode }
   end })
   entry = retry.get(input)
   assert(vim.wait(2000, function() return entry.status == "ready" end, 10), "initial limits before a failed refresh")
   mode = "hang"
   local windows = entry.windows
-  retry.get(input)
+  retry.get(input, nil, true)
   assert(vim.wait(1000, function() return entry.status == "usage request timed out" end, 10), "failed refresh times out")
   assert(entry.windows == windows and entry.reported_at, "last good windows retain their report time on failure")
   retry.close()

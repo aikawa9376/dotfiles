@@ -863,6 +863,13 @@ sync_runtime_session = function(session)
   runtime.acp_supports_audio = session.prompt_supports_audio == true
   runtime.acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0)
   runtime.footer_animation = session.footer_animation
+  runtime.footer_capabilities = session.footer_capabilities
+  runtime.footer_account_usage = session.footer_account_usage
+  runtime.acp_account_usage = session.account_usage and {
+    status = session.account_usage.status,
+    windows = session.account_usage.windows,
+  } or nil
+  runtime.acp_auth_state = session.auth_state
   runtime.footer_position = session.footer_position
   runtime.thinking_align = session.thinking_align
   runtime.protocol_log = session.protocol_log

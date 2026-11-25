@@ -941,7 +941,6 @@ function M.setup(deps)
     local preview_enabled = true
     local preview_mode = "summary"
     local detail_section = "overview"
-    local account_usage = require("lazyagent.acp.account_usage").new()
     local preview_layout = require("lazyagent.acp.cockpit").normalize_preview_layout(
       ((state.opts or {}).acp or {}).cockpit_preview_layout or (state.opts or {}).cockpit_preview_layout
     )
@@ -1248,8 +1247,8 @@ function M.setup(deps)
             if active_backend and type(active_backend.get_cockpit_details) == "function" then
               insights = active_backend.get_cockpit_details(session.pane_id)
             end
-            if detail_section == "usage" and active_backend and type(active_backend.get_account_usage_source) == "function" then
-              allowance = account_usage.get(active_backend.get_account_usage_source(session.pane_id))
+            if detail_section == "usage" and active_backend and type(active_backend.get_account_usage) == "function" then
+              allowance = active_backend.get_account_usage(session.pane_id)
             end
           end
           lines = require("lazyagent.acp.cockpit_details").render(thread, runtimes[thread.thread_id], detail_section, {
@@ -2117,6 +2116,14 @@ function M.setup(deps)
       pattern = { "LazyAgentCockpitRead", "LazyAgentTimelineChanged" },
       callback = function() pending_refresh = true end,
     })
+    vim.api.nvim_create_autocmd("User", {
+      group = preview_augroup,
+      pattern = "LazyAgentAccountUsageChanged",
+      callback = function(event)
+        if preview_mode == "details" and detail_section == "usage"
+          and event.data and event.data.thread_id == selected_thread_id() then pending_refresh = true end
+      end,
+    })
     vim.api.nvim_create_autocmd("BufWritePost", {
       group = preview_augroup,
       callback = function(args)
@@ -2170,7 +2177,6 @@ function M.setup(deps)
       buffer = bufnr,
       once = true,
       callback = function()
-        account_usage.close()
         for job in pairs(review_jobs) do pcall(job.kill, job, 15) end
         for _, check in pairs(fingerprint_checks) do if check.job then pcall(check.job.kill, check.job, 15) end end
         cancel_preview_delay()

@@ -18,7 +18,7 @@ end
 local function convert_session_capabilities(session)
   if type(session) ~= "table" then return {} end
   local result = {}
-  for _, name in ipairs({ "list", "resume", "close", "delete", "additionalDirectories" }) do
+  for _, name in ipairs({ "list", "resume", "close", "delete", "additionalDirectories", "systemPrompt" }) do
     result[name] = marker(session[name])
   end
   return result

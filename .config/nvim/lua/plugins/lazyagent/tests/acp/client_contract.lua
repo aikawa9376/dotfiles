@@ -295,7 +295,7 @@ end
 
 local function test_session_attempts_rebuild_current_context()
   local Client = require("lazyagent.acp.client")
-  local client = Client.new({})
+  local client = Client.new({ system_prompt_append = "Project instructions" })
   client.process = {}
   client.state = "ready"
   client.agent_capabilities = {
@@ -304,6 +304,7 @@ local function test_session_attempts_rebuild_current_context()
     sessionCapabilities = {
       resume = vim.empty_dict(),
       additionalDirectories = vim.empty_dict(),
+      systemPrompt = { mode = { override = vim.empty_dict() } },
     },
   }
 
@@ -340,10 +341,18 @@ local function test_session_attempts_rebuild_current_context()
       "LA-STAB-00 " .. label .. " current additional directories")
     assert_equal("context-" .. label, params.mcpServers[1].name,
       "LA-STAB-00 " .. label .. " current MCP servers")
+    assert_equal({ mode = "append", content = { { type = "text", text = "Project instructions" } } },
+      params.systemPrompt, label .. " keeps project instructions in the provider system prompt")
   end
   assert_equal(nil, captured[1].params.sessionId, "LA-STAB-00 new omits native session identity")
   assert_equal("native-load", captured[2].params.sessionId, "LA-STAB-00 load native session identity")
   assert_equal("native-resume", captured[3].params.sessionId, "LA-STAB-00 resume native session identity")
+  client.agent_capabilities.sessionCapabilities.systemPrompt = nil
+  assert_equal({ systemPrompt = { append = "Project instructions" } }, client:_build_session_params()._meta,
+    "older Claude ACP adapters receive the system prompt extension")
+  client.agent_capabilities.sessionCapabilities.list = vim.empty_dict()
+  client:list_sessions({}, function() end)
+  assert_equal("{}", vim.json.encode(captured[4].params), "an unfiltered Claude session list needs object params")
 end
 
 local function test_stdio_contract(root)

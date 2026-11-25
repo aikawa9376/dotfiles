@@ -113,8 +113,8 @@ function M.run()
   attach_client(session, calls)
   helpers.apply_initial_session_config(session)
   assert_equal(calls, {
-    { id = "reasoning_effort", value = "medium" },
     { id = "model", value = "gpt-5.6-sol" },
+    { id = "reasoning_effort", value = "medium" },
   }, "combined historical model is restored as separate model and reasoning options")
   assert_no_unavailable_warning(blocks, "compatible combined historical model is migrated without warnings")
 
@@ -137,6 +137,28 @@ function M.run()
     { id = "reasoning_effort", value = "max" },
   }, "explicit initial model and reasoning effort use separate ACP config options")
   assert_no_unavailable_warning(blocks, "supported explicit reasoning effort applies without warnings")
+
+  helpers, blocks = setup_config()
+  calls = {}
+  session = {
+    ready = true,
+    config_options = { choice_option("model", "haiku", { "haiku", "opus" }) },
+    initial_config_snapshot = {
+      { id = "effort", category = "thought_level", currentValue = "xhigh" },
+      { id = "model", category = "model", currentValue = "opus" },
+    },
+  }
+  session.client = { set_config_option = function(_, id, value, callback)
+    calls[#calls + 1] = { id = id, value = value }
+    callback({
+      choice_option("model", "opus", { "haiku", "opus" }),
+      choice_option("effort", id == "effort" and value or "high", { "high", "xhigh" }, "thought_level"),
+    })
+  end }
+  helpers.apply_initial_session_config(session)
+  assert_equal(calls, { { id = "model", value = "opus" }, { id = "effort", value = "xhigh" } },
+    "Claude effort is restored after switching to the model that advertises it")
+  assert_no_unavailable_warning(blocks, "model-dependent effort is available after switching")
 
   helpers = setup_config()
   calls = {}

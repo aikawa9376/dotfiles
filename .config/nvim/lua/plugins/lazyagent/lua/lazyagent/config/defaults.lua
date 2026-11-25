@@ -81,6 +81,8 @@ function M.build()
       initial_model = nil,
       mcp_servers = {},
       footer_animation = true,
+      footer_capabilities = false,
+      footer_account_usage = true,
       footer_position = "bottom",
       thinking_align = "center",
       protocol_log = false,

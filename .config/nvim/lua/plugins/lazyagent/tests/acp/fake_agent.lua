@@ -288,6 +288,7 @@ for line in io.lines() do
           steering = {
             supported = true,
           },
+          jetbrains = { air = { version = 1, goal = { controlMethod = "_session/goal", actions = { "set" } } } },
         },
         authMethods = auth_enabled and {
           {
@@ -388,8 +389,10 @@ for line in io.lines() do
       },
     }))
   elseif message.method == "_session/steering" then
+    local text = message.params.prompt[1] and message.params.prompt[1].text
+    local behavior = message.params._meta and message.params._meta.steering.idleBehavior
     send(response(message.id, {
-      outcome = "injected",
+      outcome = text == "Steer after completion" and behavior == "promptRequired" and "promptRequired" or "injected",
     }))
   elseif message.method == "session/delete" then
     send(response(message.id, vim.empty_dict()))
@@ -482,6 +485,7 @@ for line in io.lines() do
               jetbrains = {
                 air = {
                   version = 1,
+                  goal = { objective = "Keep integrating Claude", status = "active" },
                   sessionFailure = {
                     id = "fixture-turn:error",
                     revision = 1,
@@ -538,6 +542,9 @@ for line in io.lines() do
         method = "session/request_permission",
         params = {
           sessionId = "test-session",
+          _meta = vim.env.LAZYAGENT_FAKE_PROVIDER_EXTENSIONS == "1" and {
+            jetbrains = { air = { version = 1, permission = { title = "Approve fixture read?" } } },
+          } or nil,
           toolCall = {
             toolCallId = "tool-1",
             title = "Read fixture",

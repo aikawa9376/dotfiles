@@ -92,6 +92,10 @@ function M.run()
   assert(claude.native, "Claude uses native instructions")
   assert_equal(claude.command[#claude.command - 1], "--append-system-prompt-file", "Claude instruction flag")
   assert_equal(claude.command[#claude.command], root .. "/.lazyagent/AGENTS.md", "Claude instruction path")
+  local claude_acp = assert(project.prepare_native("Claude", root, { command = { "claude-agent-acp" }, acp = true }))
+  assert(vim.deep_equal(claude_acp.command, { "claude-agent-acp" }), "Claude adapter command takes no CLI prompt flags")
+  assert(claude_acp.native and claude_acp.system_prompt_append:find("Keep changes scoped", 1, true),
+    "Claude ACP uses session system instructions")
 
   local gemini_home = root .. "/gemini-home"
   local gemini = assert(project.prepare_native("Gemini", root, {

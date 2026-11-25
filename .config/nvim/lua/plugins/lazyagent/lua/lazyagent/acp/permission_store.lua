@@ -1,4 +1,5 @@
 local M = {}
+local Extensions = require("lazyagent.acp.extensions")
 
 local function base_dir(opts)
   return (opts and opts.base_dir) or (vim.fn.stdpath("data") .. "/lazyagent/acp/permissions")
@@ -56,7 +57,7 @@ function M.choices(options)
     local scope = tostring(option.kind or ""):match("_once$") and "once" or "agent"
     local label = string.format("%s [%s] — %s", option.name or option.optionId or "Option",
       option.kind or "option", scope == "agent" and "agent-managed" or scope)
-    local presentation = type(option._meta) == "table" and option._meta.permission or nil
+    local presentation = Extensions.meta_value(option._meta, "permission")
     if type(presentation) == "table" and presentation.description and presentation.description ~= "" then
       label = label .. "\n  " .. tostring(presentation.description)
     end

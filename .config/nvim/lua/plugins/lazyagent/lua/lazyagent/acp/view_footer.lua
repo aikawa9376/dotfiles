@@ -1,4 +1,5 @@
 local M = {}
+local account_usage = require("lazyagent.acp.account_usage")
 
 local FOOTER_ANIMATION_INTERVAL_MS = 100
 local FOOTER_RENDER_VERSION = "fg-only-v1"
@@ -22,7 +23,10 @@ function M.new(ctx)
   local function display_option(session, key, default)
     local acp = state and state.opts and state.opts.acp
     acp = type(acp) == "table" and acp or {}
-    return tostring((session and session[key]) or acp[key] or default):lower()
+    local value = session and session[key]
+    if value == nil then value = acp[key] end
+    if value == nil then value = default end
+    return tostring(value):lower()
   end
 
   local function find_config_option(session, keys)
@@ -563,6 +567,13 @@ function M.new(ctx)
       table.insert(segments, provider_usage)
     end
 
+    if session and display_option(session, "footer_account_usage", true) == "true" then
+      local auth = ({ authenticated = "Logged in", unauthenticated = "Not logged in" })[session.acp_auth_state]
+      if auth then table.insert(segments, auth) end
+      local allowance = account_usage.footer(session.acp_account_usage)
+      if allowance then table.insert(segments, allowance) end
+    end
+
     local mcp_count = tonumber(session and session.acp_mcp_server_count or 0) or 0
     if mcp_count > 0 then
       table.insert(segments, string.format("%d MCP server%s", mcp_count, mcp_count == 1 and "" or "s"))
@@ -573,12 +584,11 @@ function M.new(ctx)
       table.insert(segments, string.format("%d slash cmd%s", command_count, command_count == 1 and "" or "s"))
     end
 
-    if session and session.acp_ready then
+    if session and display_option(session, "footer_capabilities", false) == "true" and session.acp_ready then
       table.insert(segments, session.acp_supports_image and "Image input" or "No image input")
-    end
-
-    if session and session.acp_supports_embedded_context then
-      table.insert(segments, "Embedded ctx")
+      if session.acp_supports_embedded_context then
+        table.insert(segments, "Embedded ctx")
+      end
     end
 
     return segments

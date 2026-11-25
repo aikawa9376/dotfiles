@@ -156,7 +156,7 @@ agent ごとの設定は global 設定より優先されます。`interactive_ag
 
 `Screenshot delay` は待機秒数の入力欄を開き、初期値は `5` 秒です。確定後、指定秒数が経過してから範囲選択を開始するので、待機中に tmux の別ウィンドウや撮影対象の画面へ移動できます。キャンセルすると撮影しません。コマンドからは `:LazyAgentScreenShot 5` のように秒数を指定できます。引数なし・`0` は即時撮影です。scratch 外では `:LazyAgentScreenShot 5 Codex`（`Codex 5` も可）で agent も指定でき、従来の agent 名だけの指定も使えます。撮影結果は呼び出し元の scratch に添付し、待機中にその buffer を削除した場合は撮影を中止します。
 
-添付画像は `@/absolute/path/to/image.png` の行として挿入し、`folke/snacks.nvim` のimage機能が使える場合はinline previewします。Screenshotは`WAYLAND_DISPLAY` / `DISPLAY`とOSから環境を判定し、Linuxの`import`（ImageMagick / X11）または`grim+slurp`（Wayland）、macOSの`screencapture -i`、WindowsのSnipping Tool / screen clipを利用します。Wayland上でX11用の`import`へfallbackすることはありません。ACP sessionではpickerとtranscript footerにimage input capabilityを表示し、非対応agentへ添付した場合は送信前に警告します。
+添付画像は `@/absolute/path/to/image.png` の行として挿入し、`folke/snacks.nvim` のimage機能が使える場合はinline previewします。Screenshotは`WAYLAND_DISPLAY` / `DISPLAY`とOSから環境を判定し、Linuxの`import`（ImageMagick / X11）または`grim+slurp`（Wayland）、macOSの`screencapture -i`、WindowsのSnipping Tool / screen clipを利用します。Wayland上でX11用の`import`へfallbackすることはありません。ACP sessionではpickerにimage input capabilityを表示し、非対応agentへ添付した場合は送信前に警告します。transcript footerへの表示は`acp.footer_capabilities = true`で有効にできます。
 
 通常の貼り付け・文字入力・drag & dropでは、画像file pathや画像URLを含んでもテキストをそのまま保ち、画像の自動保存や`@path`への置換は行いません。`:LazyAgentImage`・`:LazyAgentPasteImage`・`:LazyAgentScreenShot`や対応するkeymapで明示的に添付した場合は、画像を取り込んで参照を挿入します。自動取り込みが必要な場合だけ`image_paste.drop.enabled = true`を指定してください（defaultは`false`）。このopt-in機能はdrag & drop専用ではなく、貼り付けや文字入力にも適用され、query string付き画像URLやSVGも対象です。defaultの`image_paste.dir_layout = "conversation"`では、画像を`image_paste.dir`配下のconversation / live transcript / scratchごとの`.../<scope>/images/`へ保存します。pickerで選んだlocal fileは`image_paste.import.copy`、自動取り込みしたlocal fileは`image_paste.drop.copy`を`false`にすると元pathをそのまま使います。フラット保存へ戻す場合は`image_paste.dir_layout = "flat"`を指定してください。Clipboard専用keymapは`scratch_keymaps.paste_image_normal` / `paste_image_insert` / `paste_image_insert_alt`で追加できます。
 
@@ -253,7 +253,7 @@ project root またはその親に `.lazyagent/` がある場合、LazyAgent 全
 └── teams.json
 ```
 
-- `.lazyagent/AGENTS.md` は project 共通 instructions として、会話の user prompt へ露出させず provider native の instruction layer へ渡します。Codex は `developer_instructions`、Copilot は custom instruction directory、Claude は appended system prompt file、Gemini は hidden runtime の `GEMINI.md` を利用します。未知の custom provider だけ、互換 fallback として最初の agent prompt に一度添付します。ACP、tmux、builtin terminal backend が対象で、Teams の role worktree からも元 project のファイルを参照します。空ファイルは無視し、サイズ上限は 128 KiB です。
+- `.lazyagent/AGENTS.md` は project 共通 instructions として provider native の instruction layer へ渡します。Codex は `developer_instructions`、Copilot は custom instruction directory、Claude ACP はセッションの `systemPrompt`、Claude CLI は `--append-system-prompt-file`、Gemini は hidden runtime の `GEMINI.md` を利用します。未知の custom provider だけ、互換 fallback として最初の agent prompt に一度添付します。ACP、tmux、builtin terminal backend が対象で、Teams の role worktree からも元 project のファイルを参照します。空ファイルは無視し、サイズ上限は 128 KiB です。
 - `.lazyagent/skills/` は全 LazyAgent session の skill source に自動追加されます。global installed skillsは`stdpath("data")/lazyagent/skills/`から先に読み込みます。
 - `.lazyagent/prompts/*.md` は `/prompt <name> [request]` で展開できます。本文中の `{{input}}` に request を差し込み、placeholder が無い場合は末尾へ `# Request` として追加します。
 - prompt 名は英数字・`_`・`-`・`.`、ファイルは直下の Markdown、サイズ上限は 64 KiB です。
@@ -493,6 +493,8 @@ require("lazyagent").setup({
     initial_model = "gpt-5.4",
     fancy_mode = true,
     footer_position = "bottom", -- "bottom" | "inline"
+    footer_capabilities = false, -- Image input / Embedded ctx
+    footer_account_usage = true,
     thinking_align = "center", -- "center" | "left"
     protocol_log = false,
     show_context_notes = false,
@@ -553,7 +555,7 @@ ACP `plan_removed`は一致するMarkdown plan artifactだけを解除します�
 
 providerがnative steering extensionを広告する場合は`ga` → `Steer active turn`で、現在turnをcancelせず追加指示を注入できます。非対応providerの`Send Now`は従来どおりcancel-and-sendです。workspace checkpointとlocal branchはfile/transcriptを復元しますが、providerが履歴rewind capabilityを持たない限りmodel内部状態のrewindを装いません。
 
-ACP scratch bufferではnormal / insert modeの`<M-s>`で、現在の内容をactive turnへのnative steeringとして送信できます。keyは`scratch_keymaps.steer_normal` / `scratch_keymaps.steer_insert`で変更でき、空文字または`false`で無効化できます。provider非対応・active turnなし・送信失敗の場合は通常promptへfallbackせず、scratch内容を保持します。
+ACP scratch bufferではnormal / insert modeの`<M-s>`で、現在の内容をactive turnへのnative steeringとして送信できます。keyは`scratch_keymaps.steer_normal` / `scratch_keymaps.steer_insert`で変更でき、空文字または`false`で無効化できます。provider非対応・active turnなし・送信失敗や、turnの終了とsteerが競合してproviderが入力を受け取れなかった場合はscratch内容を保持します。
 通常の buffer view は default で最新 `transcript_max_lines` 行だけを tail 表示します。全文を確認したい場合は `:LazyAgentACPFullTranscript` または `:LazyAgentACPRawTranscript` を使ってください。
 ストリーミング中に上限へ達した場合は、追記のたびの全体再読み込みを避けるため、上限の10%（最大1,024行）分の余裕を作って古い表示行をまとめて除きます。ディスク上の履歴は保持されます。
 
@@ -637,6 +639,8 @@ compaction で省略された以前のやり取りも含めて全文を全画面
 
 footer は advertise された metadata を使って、provider / model / mode / reasoning / context usage / remaining context / turn usage / cumulative usage / provider-specific usage をできるだけ表示します。native session title / summary は `acp.show_session_summary = true` のときだけ表示します。
 
+Claude と Codex のアカウント利用枠は `Session 56% left / Week 80% left` のように表示します。取得できたリセット時刻には `↻` が付き、末尾の `Z` は UTC です。provider が通知した認証状態があれば併記します。ACP セッションの準備時と応答完了時に取得し、成功時の再取得は30秒以上の間隔を空け、連続する失敗は5分間隔で再試行します。表示と自動取得は `acp.footer_account_usage = false` で無効にできます。`Image input` と `Embedded ctx` は `acp.footer_capabilities = true` のときに表示します。
+
 buffer 表示の `acp.footer_position` は `"bottom"`（既定）で追従中に同じウィンドウの下端へ揃い、`"inline"` で従来どおり本文末尾に続けて表示します。下端配置では本文が短い間は間の余白が減り、埋まった後は本文が上へ流れます。過去ログへスクロールすると footer も画面外へ流れ、追従を再開すると下端へ戻ります。
 
 Thinking 表示は本文の直下に置き、metadata の footer とは余白を挟んで分けます。`acp.thinking_align = "center"`（既定）で横方向の中央に、`"left"` で左寄せに表示します。どちらの option も `interactive_agents.<name>.acp` で agent ごとに上書きできます。`footer_animation = false` でも Thinking の文字は表示します。
@@ -683,7 +687,7 @@ Cockpitの`f`は全thread / 要対応thread viewを切り替え、`[e` / `]e`で
 
 Timelineはタスクの階層・状態・進捗バーを表示します。エージェントはthreadに紐づいたMCP接続の`update_timeline`で、`title`と現在のタスク全件（`id / title / status`、任意の`parent_id / weight / note`）を記録できます。重みは兄弟タスク間の相対的な作業量で、親タスクを分割しても全体に占める割合を維持します。完了タスクは100%、未完了の親は子の重み付き進捗から計算します。記録はthreadに保存され、停止後も表示できます。未記録の場合は通常のACPプラン・子agentのプラン・background taskを表示します。未取得の進捗や所要時間は推定しません。表示は最大200タスク・12階層です。
 
-Usageはコンテキスト使用量と残量、直近turnとsession累計のtoken数、providerが報告したcost、アカウントの利用枠とリセット時刻を表示します。選択したlive threadのUsageタブを開いたときだけ、インストール済みのClaude CLIへ`get_usage`、Codex CLIへ`account/rateLimits/read`を問い合わせます。新しい会話やモデルturnは作りません。起動時の環境変数・cwdを引き継ぎ、結果と失敗はそのCockpit内で5分キャッシュします。CLI未導入・未対応・取得失敗は未取得と表示し、再取得失敗時の前回値にはstaleを付けます。取得は8秒で打ち切り、Cockpitを閉じると子プロセスとタイマーを終了します。停止済み・別editorのthreadについて現在の利用量を推定しません。
+Usageはコンテキスト使用量と残量、直近turnとsession累計のtoken数、providerが報告したcost、アカウントの利用枠とリセット時刻を表示します。選択したlive threadのフッターと同じ取得結果を使い、モデル別の枠なども確認できます。取得は起動時の環境変数・cwdで、Claude CLIの`get_usage`、Codex CLIの`account/rateLimits/read`を使います。取得専用の処理なのでモデルturnは発生しません。CLI未導入・未対応・取得失敗は未取得と表示し、再取得失敗時の前回値にはstaleを付けます。取得は8秒で打ち切り、ACPセッション終了時に子プロセスとタイマーを終了します。停止済み・別editorのthreadについて現在の利用量を推定しません。
 
 一覧の`activity:`には現在のtool、Thinking / Responding、prompt準備、承認・質問・認証待ちを作業名とは別に表示します。`K`のOverviewにはActivity欄があり、providerの最終受信時刻、現在のtool、子agent・background taskの状態/概要/直近tool、planの完了項目数を表示します。UI queue内の待機と回答中を区別し、未知の状態や情報のないsessionは不明と表示します。子agentの稼働だけでは親がその終了を待っていると推定せず、受信が止まった時間だけで失敗とは判定しません。plan件数は所要時間の進捗率ではありません。各一覧は最大8件で、総件数も保持します。別editor・停止済みthreadには現在の活動を推定表示しません。
 

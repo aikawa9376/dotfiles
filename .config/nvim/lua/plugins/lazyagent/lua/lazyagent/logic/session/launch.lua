@@ -144,6 +144,8 @@ function M.setup(deps)
       smooth_scroll = vim.deepcopy(acp.smooth_scroll or {}),
       release_buffer_on_hide = acp.release_buffer_on_hide,
       footer_animation = acp.footer_animation,
+      footer_capabilities = acp.footer_capabilities,
+      footer_account_usage = acp.footer_account_usage,
       footer_position = acp.footer_position,
       thinking_align = acp.thinking_align,
       protocol_log = acp.protocol_log,
@@ -517,6 +519,7 @@ function M.setup(deps)
           split_opts,
           session_key
         )
+        split_opts.acp.system_prompt_append = prepared.system_prompt_append
         backend_mod.split(nil, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
         return
       end

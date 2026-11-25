@@ -39,6 +39,9 @@ function M.run()
   local session = {
     acp_ready = true,
     acp_supports_image = true,
+    acp_supports_embedded_context = true,
+    acp_auth_state = "authenticated",
+    acp_account_usage = { status = "ready", windows = { { period = "Week", used = 20 } } },
     acp_agent_info = { title = "Codex", version = "1.1.4" },
     acp_session_info = {
       title = "the first user message as title",
@@ -55,7 +58,15 @@ function M.run()
   assert(hidden:find("Codex 1.1.4", 1, true), "provider metadata remains visible")
   assert(not hidden:find("the first user message as title", 1, true), "session title hidden by default")
   assert(not hidden:find("the first user message as summary", 1, true), "session summary hidden by default")
-  assert(hidden:find("Image input", 1, true), "supported image input is visible")
+  assert(not hidden:find("Image input", 1, true), "image capabilities are hidden by default")
+  assert(not hidden:find("Embedded ctx", 1, true), "embedded context capability is hidden by default")
+  assert(hidden:find("Logged in", 1, true) and hidden:find("Week 80% left", 1, true), "account metadata is visible")
+  session.footer_capabilities = true
+  session.footer_account_usage = false
+  local capabilities = footer_text(session)
+  assert(capabilities:find("Image input", 1, true) and capabilities:find("Embedded ctx", 1, true),
+    "capabilities can be restored in the footer")
+  assert(not capabilities:find("Week 80% left", 1, true), "account metadata can be disabled independently")
   assert(hidden:find("Context Native resume", 1, true), "context continuity is visible independently")
   assert(hidden:find("History Unavailable", 1, true), "visible history provenance is visible independently")
 

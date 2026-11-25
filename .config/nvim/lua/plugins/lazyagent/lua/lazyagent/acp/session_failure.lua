@@ -1,19 +1,12 @@
 local M = {}
+local Extensions = require("lazyagent.acp.extensions")
 
 local function trim(value)
   return vim.trim(tostring(value or ""))
 end
 
-local function air_meta(carrier)
-  local meta = type(carrier) == "table" and carrier._meta or nil
-  local jetbrains = type(meta) == "table" and meta.jetbrains or nil
-  local air = type(jetbrains) == "table" and jetbrains.air or nil
-  if type(air) ~= "table" or tonumber(air.version) == nil or tonumber(air.version) < 1 then return nil end
-  return air
-end
-
 function M.extract(carrier)
-  local air = air_meta(carrier)
+  local air = type(carrier) == "table" and Extensions.air_meta(carrier._meta)
   local raw = air and air.sessionFailure or nil
   if type(raw) ~= "table" then return nil end
   local id = trim(raw.id)

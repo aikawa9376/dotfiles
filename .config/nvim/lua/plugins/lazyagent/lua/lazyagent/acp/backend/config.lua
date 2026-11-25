@@ -850,13 +850,17 @@ function M.setup(deps)
     session.initial_config_applied = true
 
     local pending = {}
+    local pending_effort = {}
     local saved_keys = {}
     for _, saved in ipairs(type(session.initial_config_snapshot) == "table" and session.initial_config_snapshot or {}) do
       if type(saved) == "table" and saved.id and saved.currentValue ~= nil then
         saved_keys[normalize_config_key(saved.id)] = true
         saved_keys[normalize_config_key(saved.category)] = true
-        table.insert(pending, {
-          key = saved.id,
+        local effort = normalize_config_key(saved.id) == "effort"
+          or normalize_config_key(saved.id) == "reasoningeffort"
+          or normalize_config_key(saved.category) == "thoughtlevel"
+        table.insert(effort and pending_effort or pending, {
+          key = effort and { saved.id, saved.category } or saved.id,
           value = saved.currentValue,
           title = config_option_title(saved),
         })
@@ -872,12 +876,8 @@ function M.setup(deps)
         local base_model, reasoning = split_combined_model(model)
         if base_model and find_config_choice(model_option, base_model) then
           model = base_model
-          if reasoning
-            and (not session.initial_effort or session.initial_effort == "")
-            and not saved_keys.reasoningeffort
-            and not saved_keys.thoughtlevel
-          then
-            table.insert(pending, {
+          if reasoning and (not session.initial_effort or session.initial_effort == "") and #pending_effort == 0 then
+            table.insert(pending_effort, {
               key = { "reasoning_effort", "thought_level" },
               value = reasoning,
               title = "reasoning effort",
@@ -887,16 +887,15 @@ function M.setup(deps)
       end
       table.insert(pending, { key = "model", value = model, title = "model" })
     end
-    if session.initial_effort and session.initial_effort ~= ""
-      and not saved_keys.reasoningeffort
-      and not saved_keys.thoughtlevel
-    then
-      table.insert(pending, {
+    if session.initial_effort and session.initial_effort ~= "" and #pending_effort == 0 then
+      table.insert(pending_effort, {
         key = { "reasoning_effort", "thought_level" },
         value = session.initial_effort,
         title = "reasoning effort",
       })
     end
+    -- A model change can replace the effort option and its available values.
+    vim.list_extend(pending, pending_effort)
 
     local function step(index)
       local item = pending[index]

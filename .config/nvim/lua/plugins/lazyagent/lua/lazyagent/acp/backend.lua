@@ -35,6 +35,7 @@ local ProtocolLog = require("lazyagent.acp.protocol_log")
 local Replay = require("lazyagent.acp.replay")
 local config_values = require("lazyagent.acp.config_values")
 local ReadOnlyGuard = require("lazyagent.acp.backend.read_only_guard")
+local AccountUsage = require("lazyagent.acp.account_usage")
 
 local sessions = {}
 local section_icons = {
@@ -627,6 +628,29 @@ local function create_backend(default_view)
   local closing_clients = {}
   local thread_store = ThreadStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/threads" })
   local blob_store = BlobStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/blobs" })
+
+  function backend.get_account_usage(pane_id, refresh)
+    local session = get_session(pane_id)
+    if not session or not session.ready or session.closing_intentionally then return { status = "unavailable" } end
+    if session.auth_state == "unauthenticated" then return { status = "Not logged in" } end
+    local source = backend.get_account_usage_source(pane_id)
+    if not AccountUsage.provider(source) then return { status = "unsupported" } end
+    session.account_usage_probe = session.account_usage_probe or AccountUsage.new()
+    local entry = session.account_usage_probe.get(source, function()
+      if get_session(pane_id) ~= session or session.closing_intentionally then return end
+      state_helpers.sync_runtime_session(session)
+      util.fire_event("AccountUsageChanged", { thread_id = session.thread_id })
+    end, refresh)
+    session.account_usage = entry
+    return entry
+  end
+
+  local function refresh_footer_usage(session)
+    if session.footer_account_usage and session.view and type(session.view.refresh_agent_footers) == "function" then
+      backend.get_account_usage(session.pane_id, true)
+    end
+  end
+
   local change_apply = ChangeApply.new({
     read_blob = function(ref)
       return blob_store:get(ref, { max_bytes = false })
@@ -707,6 +731,7 @@ local function create_backend(default_view)
       return false
     end
     session.pending_brain_turn = nil
+    refresh_footer_usage(session)
     local finished = finish_change_turn(session, pending.failure and "failed" or "completed")
     if not pending.failure then
       sync_thread_record(session, { metadata = { cockpit_completion = {
@@ -868,6 +893,7 @@ local function create_backend(default_view)
 
         local stop_reason = result and result.stopReason or nil
         if cancel_requested or stop_reason == "cancelled" then
+          refresh_footer_usage(session)
           session.pending_brain_turn = nil
           finalize_cancelled_tools(session)
           finish_change_turn(session, "cancelled")
@@ -1109,6 +1135,7 @@ local function create_backend(default_view)
         root_dir = acp.root_dir,
         project_instructions_root = acp.project_instructions_root or acp.root_dir or acp.cwd,
         project_instructions_native = acp.project_instructions_native == true,
+        system_prompt_append = acp.system_prompt_append,
         session_instructions = acp.session_instructions,
         additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
@@ -1148,6 +1175,8 @@ local function create_backend(default_view)
         smooth_scroll = vim.deepcopy(acp.smooth_scroll or {}),
         release_buffer_on_hide = acp.release_buffer_on_hide,
         footer_animation = acp.footer_animation,
+        footer_capabilities = acp.footer_capabilities,
+        footer_account_usage = acp.footer_account_usage,
         footer_position = acp.footer_position,
         thinking_align = acp.thinking_align,
         protocol_log = acp.protocol_log == true,
@@ -1269,6 +1298,8 @@ local function create_backend(default_view)
         view.restore_thread_view(pane_id, existing_thread.view_state, session)
       end
       host_helpers.start_client(session, {
+        on_ready = refresh_footer_usage,
+        on_auth_changed = refresh_footer_usage,
         drain_prompt_queue = function(target_pane)
           backend._drain_prompt_queue(target_pane)
         end,
@@ -1989,8 +2020,13 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     if not session then return nil end
     local command = (session.agent_cfg or {}).cmd
-    return { provider = tostring(session.agent_name or "") .. " " .. (type(command) == "string" and command or ""),
-      executable = type(command) == "string" and command:match("^%S+$") or nil, cwd = session.cwd, env = session.env }
+    local executable = type(command) == "table" and command[1] or (type(command) == "string" and command:match("^%S+$"))
+    local source = { provider = tostring(session.provider_id or session.agent_name or "")
+        .. " " .. (executable or ""), executable = executable, cwd = session.cwd, env = session.env }
+    if AccountUsage.provider(source) == "claude" then
+      source.executable = session.env.CLAUDE_CODE_EXECUTABLE or vim.env.CLAUDE_CODE_EXECUTABLE or executable
+    end
+    return source
   end
 
   function backend.get_runtime_snapshot(pane_id, opts)
@@ -2009,6 +2045,8 @@ local function create_backend(default_view)
       root_dir = session.root_dir,
       transcript_path = session.transcript_path,
       footer_animation = session.footer_animation,
+      footer_capabilities = session.footer_capabilities,
+      footer_account_usage = session.footer_account_usage,
       footer_position = session.footer_position,
       thinking_align = session.thinking_align,
       protocol_log = session.protocol_log,
@@ -2269,6 +2307,7 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     if session then
       session.closing_intentionally = true
+      if session.account_usage_probe then session.account_usage_probe.close() end
       local discard_empty_thread = session.has_user_prompt ~= true
       if next(session.tool_calls or {}) == nil then
         complete_pending_turn(session)
@@ -2813,6 +2852,14 @@ local function create_backend(default_view)
         return
       end
       local outcome = tostring(result and result.outcome or "sent")
+      if outcome == "promptRequired" then
+        callback(false, { message = "No running turn can accept steering right now" })
+        return
+      end
+      if outcome == "failed" then
+        callback(false, { message = "The provider could not apply steering" })
+        return
+      end
       local view = session_view(session)
       if view and type(view.resume_follow) == "function" then
         view.resume_follow(target_pane)

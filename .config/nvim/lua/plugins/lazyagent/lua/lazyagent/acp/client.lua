@@ -6,6 +6,7 @@ local mcp_servers = require("lazyagent.acp.mcp_servers")
 local ProtocolLog = require("lazyagent.acp.protocol_log")
 local V2Adapter = require("lazyagent.acp.v2_adapter")
 local SessionActivation = require("lazyagent.acp.session_activation")
+local Extensions = require("lazyagent.acp.extensions")
 
 local PROTOCOL_VERSION = 1
 local ERR = {
@@ -242,6 +243,7 @@ function Client.new(opts)
     mcp_headers = opts.mcp_headers or {},
     mcp_servers = opts.mcp_servers or {},
     additional_directories = vim.deepcopy(opts.additional_directories or {}),
+    system_prompt_append = opts.system_prompt_append,
     client_info = opts.client_info or default_client_info(),
     client_capabilities = vim.tbl_deep_extend(
       "force",
@@ -680,13 +682,12 @@ function Client:supports_nes()
 end
 
 function Client:supports_steering()
-  return self.agent_meta
-    and self.agent_meta.steering
-    and self.agent_meta.steering.supported == true
+  local steering = Extensions.meta_value(self.agent_meta, "steering")
+  return type(steering) == "table" and steering.supported == true
 end
 
 function Client:supports_goal(action)
-  local goal = type(self.agent_meta) == "table" and self.agent_meta.goal or nil
+  local goal = Extensions.meta_value(self.agent_meta, "goal")
   if type(goal) ~= "table" or type(goal.controlMethod) ~= "string" or goal.controlMethod == "" then return false end
   if action == nil then return true end
   for _, advertised in ipairs(type(goal.actions) == "table" and goal.actions or {}) do
@@ -715,7 +716,7 @@ function Client:control_goal(action, objective, callback)
     end
     params.objective = objective
   end
-  self:_send_request(self.agent_meta.goal.controlMethod, params, callback)
+  self:_send_request(Extensions.meta_value(self.agent_meta, "goal").controlMethod, params, callback)
 end
 
 function Client:supports_additional_directories()
@@ -742,6 +743,15 @@ function Client:_build_session_params(session_id)
   }
   if session_id ~= nil then
     params.sessionId = session_id
+  end
+  if type(self.system_prompt_append) == "string" and self.system_prompt_append ~= "" then
+    local session_caps = self.agent_capabilities and self.agent_capabilities.sessionCapabilities
+    local prompt_cap = type(session_caps) == "table" and session_caps.systemPrompt
+    if type(prompt_cap) == "table" then
+      params.systemPrompt = { mode = "append", content = { { type = "text", text = self.system_prompt_append } } }
+    else
+      params._meta = { systemPrompt = { append = self.system_prompt_append } }
+    end
   end
   if self:supports_additional_directories() and type(self.additional_directories) == "table" then
     local directories = {}
@@ -885,7 +895,7 @@ function Client:list_sessions(params, callback)
     return
   end
 
-  self:_send_request("session/list", params or vim.empty_dict(), callback)
+  self:_send_request("session/list", params and next(params) ~= nil and params or vim.empty_dict(), callback)
 end
 
 function Client:load_session(session_id, callback)
@@ -1075,6 +1085,7 @@ function Client:steer(prompt, callback)
   self:_send_request("_session/steering", {
     sessionId = self.session_id,
     prompt = prompt,
+    _meta = { steering = { idleBehavior = "promptRequired" } },
   }, callback)
 end
 

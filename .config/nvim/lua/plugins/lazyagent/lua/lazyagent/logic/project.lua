@@ -188,6 +188,9 @@ function M.prepare_native(provider_id, start_path, launch)
     end
     result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = dirs
     result.native = true
+  elseif key == "claude" and launch.acp then
+    result.system_prompt_append = combined_instructions(nil, instructions)
+    result.native = true
   elseif key == "claude" then
     for _, path in ipairs(instructions.paths or { instructions.path }) do
       result.command = append_command_args(result.command, {
