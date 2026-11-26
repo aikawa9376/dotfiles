@@ -58,6 +58,27 @@ function M.run()
     assert(vim.wait(1000, function() return callbacks.render ~= original_render end, 10), "renderer hook attached")
     bottom("short reply leaves the footer at the bottom")
 
+    local function move_cursor_up()
+      vim.api.nvim_win_call(win, function()
+        vim.cmd("normal! k")
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      end)
+    end
+    local footer_end = vim.api.nvim_buf_line_count(buf)
+    move_cursor_up()
+    assert(vim.api.nvim_win_get_cursor(win)[1] == footer_end - 1, "first upward move stays in the spacer")
+    assert(view.capture_thread_view(pane).follow_output == false, "moving up within footer padding pauses follow")
+    append(" while paused")
+    callbacks.render({ buf = buf, win = win })
+    vim.wait(30)
+    assert(vim.api.nvim_win_get_cursor(win)[1] == footer_end - 1, "stream and renderer leave the footer cursor alone")
+    local transcript_end = view._transcript_end_line(buf)
+    for _ = 1, footer_end - 1 - transcript_end do move_cursor_up() end
+    assert(vim.api.nvim_win_get_cursor(win)[1] == transcript_end, "upward moves return to the transcript")
+    assert(view.capture_thread_view(pane).follow_output == false, "approaching the transcript from below stays paused")
+    view.resume_follow(pane)
+    bottom("explicit follow returns from footer scrollback")
+
     local function thinking_mark()
       for _, mark in ipairs(footer_marks()) do
         local parts = {}; for _, chunk in ipairs(mark[4].virt_text or {}) do parts[#parts + 1] = chunk[1] end
@@ -126,7 +147,7 @@ function M.run()
     assert(vim.api.nvim_buf_get_extmarks(buf, render_ns, 0, -1, {})[1][2] == view._transcript_end_line(buf),
       "padding changes preserve renderer anchors at the first spacer row")
     render(0); bottom("removing delayed virtual rows")
-    assert(rendered == 2, "existing render callbacks are retained")
+    assert(rendered == 3, "existing render callbacks are retained")
 
     local growth = {}; for index = 1, 40 do growth[#growth + 1] = " streamed line " .. index end
     append("\n" .. table.concat(growth, "\n"))

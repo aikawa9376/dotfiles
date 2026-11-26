@@ -643,9 +643,11 @@ function M.new(ctx)
     if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
       return false
     end
+    -- Automatic follow places the cursor at the last buffer row, including
+    -- footer padding. Leaving that row pauses follow even within the footer.
     if should_follow_output(bufnr)
       and (not M._window_view_reaches_transcript_end(win, bufnr)
-        or not M._window_cursor_reaches_transcript_end(win, bufnr))
+        or vim.api.nvim_win_get_cursor(win)[1] < vim.api.nvim_buf_line_count(bufnr))
     then
       return pause_follow_output(bufnr, { reason = "manual", win = win })
     end

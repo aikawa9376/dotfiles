@@ -12,6 +12,8 @@ function M.run()
   local previous_bufnr = vim.api.nvim_win_get_buf(win)
   vim.api.nvim_win_set_buf(win, bufnr)
   vim.b[bufnr].lazyagent_acp_pane_id = "follow-test"
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.fn["repeat"]({ "test transcript line" }, 100))
+  vim.api.nvim_win_set_cursor(win, { 100, 0 })
 
   local pane_config = {
     ["follow-test"] = { follow_output = true },
@@ -52,15 +54,11 @@ function M.run()
 
   local topline = 80
   local view_at_end = true
-  local cursor_at_end = true
   api._window_topline = function(_)
     return topline
   end
   api._window_view_reaches_transcript_end = function(_win, _bufnr)
     return view_at_end
-  end
-  api._window_cursor_reaches_transcript_end = function(_win, _bufnr)
-    return cursor_at_end
   end
 
   api._on_scroll_input(win, "up")
@@ -93,12 +91,12 @@ function M.run()
     "upward scrolling within a wrapped line pauses follow")
 
   api._resume_follow_output(bufnr, { scroll = false })
-  cursor_at_end = false
+  vim.api.nvim_win_set_cursor(win, { 99, 0 })
   api._sync_follow_after_cursor_moved(bufnr, win)
   assert_equal(pane_config["follow-test"].follow_output, false,
     "moving the cursor above the end pauses follow while the end stays visible")
 
-  cursor_at_end = true
+  vim.api.nvim_win_set_cursor(win, { 100, 0 })
   api._resume_follow_output(bufnr, { scroll = false })
   topline = 80
   windowing.pause_follow_output(bufnr, { reason = "focus", win = win })
@@ -114,9 +112,9 @@ function M.run()
   api._resume_follow_if_at_end(bufnr, win)
   assert_equal(pane_config["follow-test"].follow_output, false, "leaving with an anchored end cursor stays paused")
 
-  cursor_at_end = false
+  vim.api.nvim_win_set_cursor(win, { 99, 0 })
   api._sync_follow_after_cursor_moved(bufnr, win)
-  cursor_at_end = true
+  vim.api.nvim_win_set_cursor(win, { 100, 0 })
   api._sync_follow_after_cursor_moved(bufnr, win)
   assert_equal(pane_config["follow-test"].follow_output, true, "returning the cursor to end resumes follow")
   assert_equal(scrolls_to_end, 1, "cursor return scrolls to end once")

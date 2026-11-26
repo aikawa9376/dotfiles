@@ -563,9 +563,10 @@ function M.new(ctx)
       current_last = vim.api.nvim_buf_get_lines(bufnr, transcript_stop - 1, transcript_stop, false)[1] or ""
       metadata_last = metadata_lines[transcript_stop] or current_last
     end
-    set_footer_padding(bufnr, 0)
+    -- Keep the existing padding rows while replacing the transcript tail.
+    -- Deleting them temporarily moves any cursor reading the footer.
+    local replace_end = vim.api.nvim_buf_line_count(bufnr) - footer_padding_count(bufnr)
     entry.footer_signature = nil
-    local total_lines = vim.api.nvim_buf_line_count(bufnr)
 
     local chunks = vim.split(text, "\n", { plain = true })
     local first_chunk = table.remove(chunks, 1)
@@ -608,7 +609,7 @@ function M.new(ctx)
     entry.transcript_section_items = preserved_section_items or {}
     entry.transcript_display_meta = next_meta
 
-    replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
+    replace_buffer_lines(bufnr, replace_start, replace_end, replacement)
     invalidate_transcript_section_cache(bufnr)
     return replace_start
   end
