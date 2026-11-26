@@ -78,17 +78,40 @@ function M.parse(provider, response)
   return #windows > 0 and windows or nil
 end
 
+-- Converts a reported reset timestamp with an explicit UTC offset to epoch
+-- seconds, so callers can render it in the local time zone with os.date.
+function M.reset_time(value)
+  if type(value) ~= "string" then return nil end
+  local y, m, d, hh, mm, ss, zone =
+    value:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[T ](%d%d):(%d%d):(%d%d)[.%d]*%s*(.+)$")
+  if not y then return nil end
+  local offset
+  if zone == "UTC" or zone == "Z" then
+    offset = 0
+  else
+    local sign, oh, om = zone:match("^([+-])(%d%d):?(%d%d)$")
+    if not sign then return nil end
+    offset = (sign == "-" and -1 or 1) * (tonumber(oh) * 3600 + tonumber(om) * 60)
+  end
+  y, m, d = tonumber(y), tonumber(m), tonumber(d)
+  -- Days from civil (proleptic Gregorian), independent of the local zone.
+  if m <= 2 then y = y - 1 end
+  local era = math.floor(y / 400)
+  local yoe = y - era * 400
+  local doy = math.floor((153 * (m + (m > 2 and -3 or 9)) + 2) / 5) + d - 1
+  local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+  local days = era * 146097 + doe - 719468
+  return days * 86400 + tonumber(hh) * 3600 + tonumber(mm) * 60 + tonumber(ss) - offset
+end
+
 function M.footer(entry)
   if not entry or not entry.windows then return nil end
   local parts = {}
   local function add_window(window)
     local left = math.floor(math.max(0, 100 - window.used) + 0.5)
     local label = string.format("%s %d%% left", window.period or window.label, left)
-    local reset = window.resets_at or ""
-    local month, day, time, zone = reset:match("^%d%d%d%d%-(%d%d)%-(%d%d)[T ](%d%d:%d%d):%d%d[.%d]*%s*(.+)$")
-    if zone == "UTC" or zone == "Z" or (zone and zone:match("^[+-]%d%d:?%d%d$")) then
-      label = string.format("%s ↻%s/%s %s%s", label, month, day, time, zone == "UTC" and "Z" or zone)
-    end
+    local reset = M.reset_time(window.resets_at)
+    if reset then label = label .. " " .. os.date("%m/%d %H:%M", reset) end
     parts[#parts + 1] = label
   end
   for _, window in ipairs(entry.windows) do

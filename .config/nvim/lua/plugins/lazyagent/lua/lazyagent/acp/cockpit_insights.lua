@@ -158,7 +158,7 @@ function M.timeline(data, width)
   lines[#lines + 1] = progress(done, total, width, percent)
   lines[#lines + 1] = data.weighted and "Progress uses relative sibling weights; splitting a task preserves its share."
     or "ACP plan progress uses equal sibling weights; it is not elapsed-time progress."
-  if data.recorded_at then lines[#lines + 1] = "Recorded: " .. os.date("!%Y-%m-%d %H:%M:%S UTC", data.recorded_at) end
+  if data.recorded_at then lines[#lines + 1] = "Recorded: " .. os.date("%Y-%m-%d %H:%M:%S", data.recorded_at) end
   local function append(nodes, depth)
     for _, node in ipairs(nodes) do
       local prefix = string.rep("  ", depth)
@@ -227,14 +227,17 @@ function M.usage(data, width, allowance)
     for _, window in ipairs(allowance.windows) do
       lines[#lines + 1] = ""; lines[#lines + 1] = window.label
       lines[#lines + 1] = string.format("%s %.1f%% left · %.1f%% used", bar(window.used, width), math.max(0, 100 - window.used), window.used)
-      if window.resets_at then lines[#lines + 1] = "Resets: " .. window.resets_at end
+      if window.resets_at then
+        local reset = require("lazyagent.acp.account_usage").reset_time(window.resets_at)
+        lines[#lines + 1] = "Resets: " .. (reset and os.date("%Y-%m-%d %H:%M", reset) or window.resets_at)
+      end
     end
     if #allowance.windows == 0 then lines[#lines + 1] = "No subscription limits reported for this account." end
-    if allowance.reported_at then lines[#lines + 1] = "Limits reported: " .. os.date("!%Y-%m-%d %H:%M:%S UTC", allowance.reported_at) end
+    if allowance.reported_at then lines[#lines + 1] = "Limits reported: " .. os.date("%Y-%m-%d %H:%M:%S", allowance.reported_at) end
   else
     lines[#lines + 1] = "Weekly / model-specific allowance: " .. (allowance.status or "unavailable") .. "."
   end
-  if usage.updated_at then lines[#lines + 1] = "Last reported: " .. os.date("!%Y-%m-%d %H:%M:%S UTC", usage.updated_at) end
+  if usage.updated_at then lines[#lines + 1] = "Last reported: " .. os.date("%Y-%m-%d %H:%M:%S", usage.updated_at) end
   return lines
 end
 
