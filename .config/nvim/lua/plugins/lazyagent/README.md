@@ -633,13 +633,13 @@ turn中はACP filesystem write、完了したedit tool、`BufWritePost`、filesy
 
 `:LazyAgentACPBlobGCDryRun` は全thread（archivedを含む）のmanifestからblob参照を収集し、参照切れblobの件数・容量を削除せず表示します。`:LazyAgentACPBlobGC` は同じreportを表示したあと、24時間以上参照切れのblobだけを明示確認付きで削除します。active threadまたは既に欠損した参照がある場合は削除を拒否し、確認後にもmanifest lock内で再走査するため、表示後に参照状態が変わったblobは削除しません。
 
-compaction で省略された以前のやり取りも含めて全文を全画面で見たいときは、`:LazyAgentACPFullTranscript [agent]` を使います。新しい tab に live transcript を開き、**compaction / fancy_mode / card table 変換を無効化した** ACP buffer を表示します。`q` で閉じられます。
+compaction で省略された以前のやり取りも含めて全文を全画面で見たいときは、`c<Space>F` / `:LazyAgentACPFullTranscript [agent]` を使います。新しい tab に live transcript を開き、**compaction / fancy_mode / card table 変換を無効化した** ACP buffer を表示します。全文 tab では `G` / `<End>` で追従を開始し、上へ移動すると追従を停止します。`q` で閉じられます。
 
 `:LazyAgentACPRawTranscript [agent]` は live transcript file を通常ウィンドウにそのまま開く raw log viewer です。
 
 footer は advertise された metadata を使って、provider / model / mode / reasoning / context usage / remaining context / turn usage / cumulative usage / provider-specific usage をできるだけ表示します。native session title / summary は `acp.show_session_summary = true` のときだけ表示します。
 
-Claude と Codex のアカウント利用枠は `Session 56% left / Week 80% left` のように表示します。取得できたリセット時刻には `↻` が付き、末尾の `Z` は UTC です。provider が通知した認証状態があれば併記します。ACP セッションの準備時と応答完了時に取得し、成功時の再取得は30秒以上の間隔を空け、連続する失敗は5分間隔で再試行します。表示と自動取得は `acp.footer_account_usage = false` で無効にできます。`Image input` と `Embedded ctx` は `acp.footer_capabilities = true` のときに表示します。
+Claude と Codex のアカウント利用枠は `Session 56% left 11/20 19:00 / Week 80% left` のように表示します。取得できたリセット時刻は Neovim のローカルタイムゾーンで表示します。provider が通知した認証状態があれば併記します。ACP セッションの準備時と応答完了時に取得し、成功時の再取得は30秒以上の間隔を空け、連続する失敗は5分間隔で再試行します。表示と自動取得は `acp.footer_account_usage = false` で無効にできます。`Image input` と `Embedded ctx` は `acp.footer_capabilities = true` のときに表示します。
 
 buffer 表示の `acp.footer_position` は `"bottom"`（既定）で追従中に同じウィンドウの下端へ揃い、`"inline"` で従来どおり本文末尾に続けて表示します。下端配置では本文が短い間は間の余白が減り、埋まった後は本文が上へ流れます。過去ログへスクロールすると footer も画面外へ流れ、追従を再開すると下端へ戻ります。
 

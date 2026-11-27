@@ -553,7 +553,9 @@ function M.new(ctx)
   M._on_image_layout_changed = M._on_transcript_layout_changed
 
   function M._sync_follow_after_scroll(bufnr, win, scroll)
-    if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+    if not bufnr or not is_acp_buffer(bufnr)
+      or (not should_follow_output(bufnr) and not M._follow_auto_resume_enabled(bufnr))
+    then
       return false
     end
     scroll = scroll or {}
@@ -610,7 +612,7 @@ function M.new(ctx)
       return
     end
     local bufnr = vim.api.nvim_win_get_buf(win)
-    if not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+    if not is_acp_buffer(bufnr) then
       return
     end
     require("lazyagent.acp.view_buffer.smooth_scroll").stop_for_buffer(bufnr)
@@ -620,7 +622,7 @@ function M.new(ctx)
     local pane_opts = pane_opts_for_bufnr(bufnr)
     local generation = (pane_opts.follow_input_generation or 0) + 1
     pane_opts.follow_input_generation = generation
-    if direction ~= "down" or should_follow_output(bufnr) then
+    if direction ~= "down" or should_follow_output(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
       return
     end
     pane_opts.follow_resume_scroll_armed = true
@@ -640,7 +642,7 @@ function M.new(ctx)
   end
 
   function M._sync_follow_after_cursor_moved(bufnr, win)
-    if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+    if not bufnr or not is_acp_buffer(bufnr) then
       return false
     end
     -- Automatic follow places the cursor at the last buffer row, including
@@ -654,7 +656,7 @@ function M.new(ctx)
     if should_follow_output(bufnr) then
       M._notify_transcript_read(bufnr)
     end
-    if not should_follow_output(bufnr) then
+    if not should_follow_output(bufnr) and M._follow_auto_resume_enabled(bufnr) then
       local pane_opts = pane_opts_for_bufnr(bufnr)
       if not M._window_cursor_reaches_transcript_end(win, bufnr) then
         pane_opts.follow_pause_cursor_left_end = true

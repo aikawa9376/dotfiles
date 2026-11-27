@@ -726,7 +726,7 @@ function M.attach(api, ctx)
       if (pane_config[pane_id] or {}).follow_input_generation ~= generation then
         return
       end
-      if opts.resume_at_end == true and M._any_window_at_transcript_end(bufnr) then
+      if opts.resume_at_end == true and M._follow_auto_resume_enabled(bufnr) and M._any_window_at_transcript_end(bufnr) then
         M._resume_follow_output(bufnr)
       end
     end
